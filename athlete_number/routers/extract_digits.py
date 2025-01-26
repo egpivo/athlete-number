@@ -21,12 +21,12 @@ def extract_numbers(text: str) -> str:
     summary="Upload an image file for number extraction",
     response_model=NumberExtractionResponse,
 )
-async def extract_text(file: UploadFile = File(...)):
+async def extract_text(file: UploadFile = File(...)) -> NumberExtractionResponse:
     try:
         image_bytes = await file.read()
         extracted_text = extract_text_from_image_file(image_bytes)
         extracted_number = extract_numbers(extracted_text)
-        return {"extracted_number": extracted_number}
+        return NumberExtractionResponse(extracted_number=extracted_number)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
