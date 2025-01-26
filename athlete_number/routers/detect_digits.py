@@ -1,9 +1,9 @@
 import asyncio
+import traceback
 from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
-from athlete_number.core.configs import YOLOv5_URL
 from athlete_number.core.schemas import DetectionResponse
 from athlete_number.services.detection import DetectionService
 from athlete_number.utils.image_processor import ImageHandler
@@ -18,16 +18,17 @@ router = APIRouter(prefix="/detect", tags=["Digit Detection"])
 async def startup_event():
     """Initialize detection service on startup"""
     try:
-        await DetectionService.get_instance(YOLOv5_URL)
+        await DetectionService.get_instance()
     except Exception as e:
-        LOGGER.error(f"Startup failed: {str(e)}")
+        error_trace = traceback.format_exc()
+        LOGGER.error(f"❌ Startup failed: {e}\n{error_trace}")
         raise RuntimeError("Startup failed")
 
 
 async def get_detection_service():
     """Dependency to get detection service instance"""
     try:
-        return await DetectionService.get_instance(YOLOv5_URL)
+        return await DetectionService.get_instance()
     except RuntimeError:
         raise HTTPException(status_code=503, detail="Service unavailable")
 

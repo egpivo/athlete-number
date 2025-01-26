@@ -1,1 +1,7 @@
-YOLOv5_URL = "https://github.com/ultralytics/yolov5/releases/download/v6.0/yolov5s.pt"
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+YOLOv5_PATH = os.getenv("YOLOv5_PATH", "models/best.pt")  # Default fallback
