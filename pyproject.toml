@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "athlete_number"
-version = "0.1.0"
+version = "0.0.0"
 description = "Athelete number extraction service"
 authors = ["Joseph Wang <joseph.wang@instai.co>"]
 license = "MIT"
@@ -34,12 +34,3 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 start = "athlete_number.main:main"
-
-[tool.bump2version]
-current_version = "0.1.0"
-commit = true
-tag = true
-
-[tool.bump2version.file."pyproject.toml"]
-search = 'version = "{current_version}"'
-replace = 'version = "{new_version}"'
