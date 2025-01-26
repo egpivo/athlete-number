@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "athlete_number"
+version = "0.0.0"
+description = "Athelete number extraction service"
+authors = ["Joseph Wang <joseph.wang@instai.co>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10.13"
+uvicorn = "^0.34.0"
+fastapi = "^0.115.7"
+pytesseract = "^0.3.13"
+opencv-python = "^4.11.0.86"
+pillow = "^11.1.0"
+pytest = "^8.3.4"
+pytest-cov = "^6.0.0"
+pytest-asyncio = "^0.25.2"
+httpx = "^0.28.1"
+pydantic = "^2.10.6"
+python-multipart = "^0.0.20"
+
+python-dotenv = "^1.0.1"
+gunicorn = "^23.0.0"
+cachetools = "^5.5.0"
+bumpversion = "^0.6.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest-cov = "^6.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+start = "athlete_number.main:main"
