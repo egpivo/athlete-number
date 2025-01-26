@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "athlete_number"
-version = "0.0.1"
+version = "0.0.0"
 description = "Athelete number extraction service"
 authors = ["Joseph Wang <joseph.wang@instai.co>"]
 license = "MIT"
@@ -23,6 +23,7 @@ python-multipart = "^0.0.20"
 python-dotenv = "^1.0.1"
 gunicorn = "^23.0.0"
 cachetools = "^5.5.0"
+bumpversion = "^0.6.0"
 [tool.poetry.group.dev.dependencies]
 pytest-cov = "^6.0.0"
 
@@ -32,3 +33,12 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 start = "athlete_number.main:main"
+
+[tool.bump2version]
+current_version = "0.0.0"
+commit = true
+tag = true
+
+[tool.bump2version.file."pyproject.toml"]
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
