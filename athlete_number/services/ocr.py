@@ -1,3 +1,5 @@
+import re
+
 import cv2
 import numpy as np
 import pytesseract
@@ -31,3 +33,9 @@ def extract_text_from_image_file(image_bytes: bytes) -> str:
     except Exception as e:
         LOGGER.exception("Unexpected error during image processing")
         raise ValueError("Failed to process image") from e
+
+
+def extract_numbers(text: str) -> str:
+    """Extract only numeric characters from the OCR output."""
+    numbers = re.findall(r"\d+", text)  # Extract all numbers
+    return " ".join(numbers) if numbers else "No numbers found"
