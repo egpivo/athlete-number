@@ -2,14 +2,15 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from athlete_number.core.schemas import TextExtractionResponse
 from athlete_number.services.ocr_service import extract_text_from_image_file
-from athlete_number.utils.logger import logger
+from athlete_number.utils.logger import setup_logger
 
-router = APIRouter(prefix="/ocr", tags=["OCR"])
+router = APIRouter(prefix="/extract", tags=["OCR"])
+LOGGER = setup_logger(__name__)
 
 
 @router.post(
-    "/extract-text",
-    summary="Upload an image file for text extraction",
+    "/number",
+    summary="Upload an image file for number extraction",
     response_model=TextExtractionResponse,
 )
 async def extract_text(file: UploadFile = File(...)):
@@ -20,5 +21,5 @@ async def extract_text(file: UploadFile = File(...)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
-        logger.exception("Failed to process the uploaded file")
+        LOGGER.exception("Failed to process the uploaded file")
         raise HTTPException(status_code=500, detail="Internal server error")

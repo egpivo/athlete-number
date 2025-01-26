@@ -3,7 +3,9 @@ import numpy as np
 import pytesseract
 from PIL import UnidentifiedImageError
 
-from athlete_number.utils.logger import logger
+from athlete_number.utils.logger import setup_logger
+
+LOGGER = setup_logger(__name__)
 
 
 def extract_text_from_image_file(image_bytes: bytes) -> str:
@@ -19,13 +21,13 @@ def extract_text_from_image_file(image_bytes: bytes) -> str:
 
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         extracted_text = pytesseract.image_to_string(image_rgb)
-        logger.debug(f"Extracted text: {extracted_text}")
+        LOGGER.debug(f"Extracted text: {extracted_text}")
 
         return extracted_text
 
     except UnidentifiedImageError as e:
-        logger.error(f"Unsupported image format: {e}")
+        LOGGER.error(f"Unsupported image format: {e}")
         raise ValueError("Unsupported image format") from e
     except Exception as e:
-        logger.exception("Unexpected error during image processing")
+        LOGGER.exception("Unexpected error during image processing")
         raise ValueError("Failed to process image") from e
