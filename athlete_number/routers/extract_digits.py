@@ -1,7 +1,7 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from athlete_number.core.schemas import TextExtractionResponse
-from athlete_number.services.ocr_service import extract_text_from_image_file
+from athlete_number.services.ocr import extract_text_from_image_file
 from athlete_number.utils.logger import setup_logger
 
 router = APIRouter(prefix="/extract", tags=["OCR"])

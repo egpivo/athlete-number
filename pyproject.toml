@@ -24,6 +24,10 @@ python-dotenv = "^1.0.1"
 gunicorn = "^23.0.0"
 cachetools = "^5.5.0"
 bumpversion = "^0.6.0"
+torch = "^2.5.1"
+torchvision = "^0.20.1"
+yolov5 = "^7.0.14"
+aiofiles = "^24.1.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest-cov = "^6.0.0"
