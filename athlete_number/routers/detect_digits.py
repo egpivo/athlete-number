@@ -9,8 +9,9 @@ from athlete_number.services.detection import DetectionService
 from athlete_number.utils.image_processor import ImageHandler
 from athlete_number.utils.logger import setup_logger
 
-router = APIRouter(prefix="/detect", tags=["Digit Detection"])
 LOGGER = setup_logger(__name__)
+
+router = APIRouter(prefix="/detect", tags=["Digit Detection"])
 
 
 @router.on_event("startup")
@@ -20,13 +21,13 @@ async def startup_event():
         await DetectionService.get_instance(YOLOv5_URL)
     except Exception as e:
         LOGGER.error(f"Startup failed: {str(e)}")
-        raise
+        raise RuntimeError("Startup failed")
 
 
 async def get_detection_service():
     """Dependency to get detection service instance"""
     try:
-        return await DetectionService.get_instance()
+        return await DetectionService.get_instance(YOLOv5_URL)
     except RuntimeError:
         raise HTTPException(status_code=503, detail="Service unavailable")
 
@@ -52,18 +53,26 @@ async def detect_digits(
     """
     try:
         # Process image asynchronously
-        image = await image_handler.validate_and_convert_async(file)
+        image = await image_handler.validate_and_convert(file)
+
+        # Start time
+        start_time = asyncio.get_event_loop().time()
 
         # Run detection in thread pool to avoid blocking
-        results = await asyncio.to_thread(service.detector.detect, image)
+        detections = await asyncio.to_thread(service.detector.detect, image)
+
+        # End time
+        end_time = asyncio.get_event_loop().time()
+        processing_time = end_time - start_time
 
         return DetectionResponse(
-            detections=results,
+            detections=detections,
             metadata={
                 "width": image.width,
                 "height": image.height,
                 "model_version": service.detector.model_version,
-                "processing_time": results.metadata.get("processing_time", 0),
+                "device": service.detector.device_type,
+                "processing_time": processing_time,
             },
         )
 
