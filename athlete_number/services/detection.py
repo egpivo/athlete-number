@@ -39,7 +39,7 @@ class DigitDetector:
         try:
             img_array = np.array(image)
             results = self.model.predict(
-                img_array, conf=0.5, classes=list(range(10)), verbose=False
+                img_array, conf=0.3, classes=list(range(10)), verbose=False
             )
             return self._format_results(results)
         except Exception as e:
