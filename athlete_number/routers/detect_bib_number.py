@@ -1,8 +1,8 @@
 import asyncio
 import traceback
-from typing import Dict
+from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from athlete_number.core.schemas import DetectionResponse
 from athlete_number.services.detection import DetectionService
@@ -34,68 +34,69 @@ async def get_detection_service():
 
 
 @router.post(
-    "/detect",
-    response_model=DetectionResponse,
+    "/bibs",
+    response_model=List[DetectionResponse],
+    description=(
+        "This endpoint processes multiple image files and detects athlete bib numbers using "
+        "a YOLO-based model. The response includes detected bounding boxes, confidence scores, "
+        "and metadata for each processed image."
+    ),
     responses={
         200: {"description": "Successful detection"},
-        400: {"description": "Invalid input"},
+        400: {"description": "Invalid input or missing files"},
         500: {"description": "Internal processing error"},
         503: {"description": "Service unavailable"},
     },
 )
 async def detect_bib_numbers(
-    file: UploadFile,
+    files: List[UploadFile] = File(...),  # Accept multiple files
     service: DetectionService = Depends(get_detection_service),
     image_handler: ImageHandler = Depends(),
-) -> DetectionResponse:
+) -> List[DetectionResponse]:
     """
-    Detect bibs in the uploaded image using the YOLO model.
-    Returns detection results and basic metadata.
+    Detect bib numbers in multiple uploaded images using the YOLO model.
+
+    - Accepts multiple images.
+    - Runs detection in parallel using `asyncio.gather()`.
+    - Returns bounding boxes, confidence scores, and image metadata.
     """
-    try:
-        # Process image asynchronously
-        image = await image_handler.validate_and_convert(file)
 
-        # Start time
-        start_time = asyncio.get_event_loop().time()
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
 
-        # Run detection in thread pool to avoid blocking
-        detections = await asyncio.to_thread(service.detector.detect, image)
+    async def process_file(file: UploadFile):
+        try:
+            LOGGER.info(f"Processing file: {file.filename}")
 
-        # End time
-        end_time = asyncio.get_event_loop().time()
-        processing_time = end_time - start_time
+            image = await image_handler.validate_and_convert(file)
+            start_time = asyncio.get_event_loop().time()
+            detections = await asyncio.to_thread(service.detector.detect, image)
+            processing_time = asyncio.get_event_loop().time() - start_time
 
-        return DetectionResponse(
-            detections=detections,
-            metadata={
-                "width": image.width,
-                "height": image.height,
-                "model_version": service.detector.model_version,
-                "device": service.detector.device_type,
-                "processing_time": processing_time,
-            },
-        )
+            response = DetectionResponse(
+                filename=file.filename,
+                detections=detections,
+                metadata={
+                    "width": image.width,
+                    "height": image.height,
+                    "model_version": service.detector.model_version,
+                    "device": service.detector.device_type,
+                    "processing_time": processing_time,
+                },
+            )
 
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        LOGGER.error(f"Detection failed: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal processing error")
+            return response.model_dump()
+        except Exception as e:
+            LOGGER.error(
+                f"Detection failed for {file.filename}: {str(e)}", exc_info=True
+            )
+            response = DetectionResponse(
+                filename=file.filename,
+                detections=[],
+                metadata={"error": "Processing failed"},
+            )
+            return response.model_dump()
 
+    results = await asyncio.gather(*(process_file(file) for file in files))
 
-@router.get("/health")
-async def service_health(
-    service: DetectionService = Depends(get_detection_service),
-) -> Dict[str, str]:
-    """
-    Health-check endpoint to confirm service readiness.
-    """
-    return {
-        "status": "healthy" if service.detector else "unavailable",
-        "model_version": service.detector.model_version
-        if service.detector
-        else "unknown",
-        "device": service.detector.device_type if service.detector else "unknown",
-        "model_status": "loaded" if service.detector else "failed",
-    }
+    return results

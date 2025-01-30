@@ -16,7 +16,9 @@ LOGGER = setup_logger(__name__)
 reader = easyocr.Reader(["en"], gpu=True)
 
 
-def preprocess_for_ocr(image: np.ndarray, debug_path: str) -> np.ndarray:
+def preprocess_for_ocr(
+    image: np.ndarray, debug_path: str, is_debug: bool = False
+) -> np.ndarray:
     """Preprocess the image for improved OCR accuracy."""
 
     if image is None or image.size == 0:
@@ -43,16 +45,15 @@ def preprocess_for_ocr(image: np.ndarray, debug_path: str) -> np.ndarray:
     scale_factor = 800 / width
     resized = cv2.resize(dilated, (800, int(height * scale_factor)))
 
-    # Save for debugging
-    cv2.imwrite(f"{debug_path}_gray.jpg", gray)
-    cv2.imwrite(f"{debug_path}_enhanced.jpg", enhanced)
-    cv2.imwrite(f"{debug_path}_binarized.jpg", binarized)
-    cv2.imwrite(f"{debug_path}_dilated.jpg", dilated)
-    cv2.imwrite(f"{debug_path}_resized.jpg", resized)
-
-    LOGGER.info(
-        f"✅ Preprocessed image saved: {debug_path}_resized.jpg (Shape: {resized.shape})"
-    )
+    if is_debug:
+        cv2.imwrite(f"{debug_path}_gray.jpg", gray)
+        cv2.imwrite(f"{debug_path}_enhanced.jpg", enhanced)
+        cv2.imwrite(f"{debug_path}_binarized.jpg", binarized)
+        cv2.imwrite(f"{debug_path}_dilated.jpg", dilated)
+        cv2.imwrite(f"{debug_path}_resized.jpg", resized)
+        LOGGER.info(
+            f"✅ Preprocessed image saved: {debug_path}_resized.jpg (Shape: {resized.shape})"
+        )
     return resized
 
 
@@ -63,45 +64,8 @@ def clean_ocr_output(text: str) -> str:
     return text
 
 
-def extract_text_from_image_file(
-    image_bytes: bytes, debug_path: str = "debug_ocr"
-) -> str:
-    """Extract text from an image using EasyOCR and clean the results."""
-    try:
-        # Decode image bytes
-        image_np = np.frombuffer(image_bytes, np.uint8)
-        image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
-
-        if image is None:
-            raise ValueError("Failed to decode the image, invalid format.")
-
-        # Preprocess image
-        processed_image = preprocess_for_ocr(image, debug_path)
-
-        # Try EasyOCR first
-        results = reader.readtext(processed_image, detail=0, allowlist="0123456789")
-
-        if results:
-            raw_text = "".join(results)
-            cleaned_text = clean_ocr_output(raw_text)
-            LOGGER.info(f"🔍 EasyOCR Output: {results} -> Cleaned: {cleaned_text}")
-            return cleaned_text
-
-        # If EasyOCR fails, use Tesseract as a fallback
-        LOGGER.warning("⚠ EasyOCR failed, switching to Tesseract OCR.")
-        tesseract_output = pytesseract.image_to_string(
-            processed_image, config="--psm 6 -c tessedit_char_whitelist=0123456789"
-        ).strip()
-
-        cleaned_text = clean_ocr_output(tesseract_output)
-        LOGGER.info(
-            f"🔍 Tesseract Output: {tesseract_output} -> Cleaned: {cleaned_text}"
-        )
-        return cleaned_text
-
-    except Exception:
-        LOGGER.exception("❌ OCR failed to extract text.")
-        return ""
+def parse_numbers(texts: List[str]) -> List[str]:
+    return [num for text in texts for num in re.findall(r"\d+", text)]
 
 
 def extract_text_from_image_file(
@@ -109,39 +73,30 @@ def extract_text_from_image_file(
 ) -> List[str]:
     """Extract text from an image using EasyOCR with preprocessing."""
     try:
-        # Decode image bytes
         image_np = np.frombuffer(image_bytes, np.uint8)
-        image = cv2.imdecode(
-            image_np, cv2.IMREAD_COLOR
-        )  # Ensure it's always a valid image
+        image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
 
         if image is None:
             raise ValueError("Failed to decode the image, invalid format.")
 
-        # Preprocess the image
         processed_image = preprocess_for_ocr(image, debug_path)
-
-        # Run EasyOCR
         results = reader.readtext(processed_image, detail=0, allowlist="0123456789")
 
         LOGGER.info(f"🔍 EasyOCR Output: {results}")
         return results
-    except Exception:
-        LOGGER.exception("❌ EasyOCR failed to extract text.")
+    except Exception as e:
+        LOGGER.exception(f"❌ EasyOCR failed to extract text - {e}.")
         return ""
-
-
-def extract_numbers(text: str) -> str:
-    """Extract only numeric characters from the OCR output."""
-    numbers = re.findall(r"\d+", text)  # Extract all numbers
-    return " ".join(numbers) if numbers else "No numbers found"
 
 
 class OCRService:
     _instance = None
 
     def __init__(self):
-        pass
+        if OCRService._instance is not None:
+            raise RuntimeError(
+                "OCRService is a singleton class. Use get_instance() instead."
+            )
 
     @classmethod
     async def get_instance(cls):
@@ -151,22 +106,22 @@ class OCRService:
         return cls._instance
 
     async def extract_text_async(self, image: Image.Image) -> str:
-        """Asynchronous OCR processing for an image."""
         return await asyncio.to_thread(self.extract_text, image)
 
-    def extract_text(self, image: Image.Image) -> str:
-        """Run OCR on an image."""
+    @staticmethod
+    def extract_text(image: Image.Image) -> str:
         try:
             image_np = np.array(image)
             image_rgb = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
-            extracted_text = pytesseract.image_to_string(image_rgb)
+            extracted_text = pytesseract.image_to_string(image_rgb).strip()
+
             LOGGER.debug(f"🔍 OCR Output: {extracted_text}")
-            return extracted_text.strip()
+            return extracted_text
         except Exception as e:
             LOGGER.error(f"❌ OCR processing failed: {e}", exc_info=True)
             return ""
 
-    def clean_numbers(self, text: str) -> str:
-        """Extract only numeric characters from OCR output."""
+    @staticmethod
+    def clean_numbers(text: str) -> str:
         numbers = re.findall(r"\d+", text)
         return "".join(numbers) if numbers else ""

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 
 class NumberExtractionResponse(BaseModel):
+    filename: str
     extracted_number: List[str]
 
 
@@ -14,11 +15,13 @@ class DetectionResult(BaseModel):
 
 
 class DetectionResponse(BaseModel):
+    filename: str
     detections: list[DetectionResult]
     metadata: dict
 
 
 class AthleteNumberResponse(BaseModel):
+    filename: str
     athlete_numbers: List[str]
     yolo_detections: List[Dict]
     ocr_results: List[str]
