@@ -4,9 +4,9 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
-from athlete_number.routers.detect_digits import router as detect_router
-from athlete_number.routers.extract_athlete_number import router as athlete_router
-from athlete_number.routers.extract_digits import router as extract_router
+from athlete_number.routers.detect_bib_number import router as detect_router
+from athlete_number.routers.extract_bib_number import router as athlete_router
+from athlete_number.routers.extract_numbers import router as extract_router
 
 load_dotenv()
 app = FastAPI()

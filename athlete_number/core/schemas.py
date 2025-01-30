@@ -1,14 +1,14 @@
-from typing import List
+from typing import Dict, List
 
 from pydantic import BaseModel
 
 
 class NumberExtractionResponse(BaseModel):
-    extracted_number: str
+    extracted_number: List[str]
 
 
 class DetectionResult(BaseModel):
-    digit: int
+    class_id: int
     confidence: float
     bbox: list[float]
 
@@ -19,9 +19,9 @@ class DetectionResponse(BaseModel):
 
 
 class AthleteNumberResponse(BaseModel):
-    athlete_number: str
-    yolo_detections: list
-    ocr_results: List[str]  # OCR outputs
+    athlete_numbers: List[str]
+    yolo_detections: List[Dict]
+    ocr_results: List[str]
     processing_time: float
-    confidence: float  # Combined confidence score
-    model_versions: dict
+    confidence: float
+    model_versions: Dict[str, str]

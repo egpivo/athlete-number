@@ -1,5 +1,6 @@
 import asyncio
 import re
+from typing import List
 
 import cv2
 import easyocr
@@ -105,7 +106,7 @@ def extract_text_from_image_file(
 
 def extract_text_from_image_file(
     image_bytes: bytes, debug_path: str = "debug_ocr"
-) -> str:
+) -> List[str]:
     """Extract text from an image using EasyOCR with preprocessing."""
     try:
         # Decode image bytes
@@ -124,7 +125,7 @@ def extract_text_from_image_file(
         results = reader.readtext(processed_image, detail=0, allowlist="0123456789")
 
         LOGGER.info(f"🔍 EasyOCR Output: {results}")
-        return "".join(results)  # Join all detected numbers
+        return results
     except Exception:
         LOGGER.exception("❌ EasyOCR failed to extract text.")
         return ""

@@ -6,7 +6,7 @@ import torch
 from PIL import Image
 from ultralytics import YOLO
 
-from athlete_number.core.configs import YOLOv5_PATH
+from athlete_number.core.configs import YOLO_PATH
 from athlete_number.services.utils import ModelPathResolver
 from athlete_number.utils.logger import setup_logger
 
@@ -56,7 +56,7 @@ class DigitDetector:
                 ]  # Flattened
                 detections.append(
                     {
-                        "digit": int(box.cls.item()),
+                        "class_id": int(box.cls.item()),
                         "confidence": float(box.conf.item()),
                         "bbox": xyxy,
                     }
@@ -84,7 +84,7 @@ class DetectionService:
             if self.detector is not None:
                 return
             try:
-                model_path = ModelPathResolver(YOLOv5_PATH).get_model_path()
+                model_path = ModelPathResolver(YOLO_PATH).get_model_path()
                 self.detector = DigitDetector(model_path)  # Load model here
                 LOGGER.info("✅ Model initialized successfully.")
             except Exception as e:

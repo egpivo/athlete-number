@@ -14,7 +14,7 @@ router = APIRouter(prefix="/extract", tags=["Athlete Number Extraction"])
 
 
 @router.post(
-    "/athlete-number",
+    "/bib-number",
     response_model=AthleteNumberResponse,
     summary="Extract athlete number using YOLO detection and OCR",
 )
@@ -25,9 +25,9 @@ async def extract_athlete_number(
 ) -> AthleteNumberResponse:
     """
     Combines YOLO detection and OCR verification:
-    - YOLO identifies potential digit regions
-    - OCR verifies each detected region
-    - Returns structured results with confidence
+    - YOLO identifies potential bib number regions
+    - OCR extracts text from the detected bib regions
+    - Returns structured results including detections, OCR results, and processing time
     """
     try:
         start_time = asyncio.get_event_loop().time()
@@ -36,7 +36,7 @@ async def extract_athlete_number(
         image = await image_handler.validate_and_convert(file)
 
         # Process image through YOLO + OCR
-        athlete_number = await orchestrator.process_image(image)
+        athlete_numbers = await orchestrator.process_image(image)
 
         # Calculate processing time
         processing_time = round(asyncio.get_event_loop().time() - start_time, 4)
@@ -44,19 +44,20 @@ async def extract_athlete_number(
         # Get model versions
         detection_service = await DetectionService.get_instance()
 
-        # Prepare a proper structured response
+        # Ensure orchestrator attributes exist
+        orchestrator.last_detections = getattr(orchestrator, "last_detections", [])
+        orchestrator.last_ocr_results = getattr(orchestrator, "last_ocr_results", [])
+        orchestrator.last_confidence_score = getattr(
+            orchestrator, "last_confidence_score", 0.0
+        )
+
+        # Prepare structured response
         response_data = {
-            "athlete_number": athlete_number,
-            "yolo_detections": orchestrator.last_detections
-            if hasattr(orchestrator, "last_detections")
-            else [],
-            "ocr_results": orchestrator.last_ocr_results
-            if hasattr(orchestrator, "last_ocr_results")
-            else [],
+            "athlete_numbers": athlete_numbers,  # List of detected bib numbers
+            "yolo_detections": orchestrator.last_detections,
+            "ocr_results": orchestrator.last_ocr_results,
             "processing_time": processing_time,
-            "confidence": orchestrator.last_confidence_score
-            if hasattr(orchestrator, "last_confidence_score")
-            else 0.0,
+            "confidence": orchestrator.last_confidence_score,
             "model_versions": {
                 "detection": detection_service.detector.model_version,
                 "ocr": "tesseract-v5.3.1",

@@ -1,4 +1,5 @@
 import re
+from typing import List
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
@@ -10,22 +11,25 @@ router = APIRouter(prefix="/extract", tags=["OCR"])
 LOGGER = setup_logger(__name__)
 
 
-def extract_numbers(text: str) -> str:
-    """Extract only numeric characters from the OCR output."""
-    numbers = re.findall(r"\d+", text)  # Extract all numbers
-    return " ".join(numbers) if numbers else "No numbers found"
+def parse_numbers(numbers: List[str]) -> List[str]:
+    parsed_numbers = []
+    for number in numbers:
+        parsed_number = re.findall(r"\d+", number)
+        if parsed_number:
+            parsed_numbers.append("".join(parsed_number))
+    return parsed_numbers
 
 
 @router.post(
-    "/number",
-    summary="Upload an image file for number extraction",
+    "/numbers",
+    summary="Upload an image file for numbers extraction",
     response_model=NumberExtractionResponse,
 )
 async def extract_text(file: UploadFile = File(...)) -> NumberExtractionResponse:
     try:
         image_bytes = await file.read()
-        extracted_text = extract_text_from_image_file(image_bytes)
-        extracted_number = extract_numbers(extracted_text)
+        extracted_numbers = extract_text_from_image_file(image_bytes)
+        extracted_number = parse_numbers(extracted_numbers)
         return NumberExtractionResponse(extracted_number=extracted_number)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

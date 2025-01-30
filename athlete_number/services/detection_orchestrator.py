@@ -1,77 +1,48 @@
 import asyncio
+import time
 from typing import List
 
 import cv2
 import numpy as np
+import pytesseract
 from PIL import Image
 
 from athlete_number.utils.logger import setup_logger
 
 LOGGER = setup_logger(__name__)
 
+# Minimum acceptable width and height for bounding boxes
+MIN_WIDTH = 150
+MIN_HEIGHT = 100
+
 
 def is_valid_bbox(bbox):
-    """Filters out detections that don't match typical bib number dimensions."""
+    """Filters detections based on bounding box size and aspect ratio."""
     x1, y1, x2, y2 = map(int, bbox)
     width = x2 - x1
     height = y2 - y1
     aspect_ratio = width / height
 
-    # Bib numbers are usually wider than they are tall
-    return 2.0 > aspect_ratio > 0.5
+    LOGGER.info(
+        f"🔍 Checking BBox {bbox} - Width: {width}, Height: {height}, Aspect Ratio: {aspect_ratio}"
+    )
 
-
-MIN_WIDTH = 150
-MIN_HEIGHT = 100
-
-
-def adjust_bbox(bbox, image_width, image_height):
-    """Ensures the cropped region has a minimum width and height."""
-    x1, y1, x2, y2 = map(int, bbox)
-
-    width = x2 - x1
-    height = y2 - y1
-
-    # Ensure minimum width
-    if width < MIN_WIDTH:
-        center_x = (x1 + x2) // 2
-        x1 = max(0, center_x - MIN_WIDTH // 2)
-        x2 = min(image_width, center_x + MIN_WIDTH // 2)
-
-    # Ensure minimum height
-    if height < MIN_HEIGHT:
-        center_y = (y1 + y2) // 2
-        y1 = max(0, center_y - MIN_HEIGHT // 2)
-        y2 = min(image_height, center_y + MIN_HEIGHT // 2)
-
-    return x1, y1, x2, y2
+    # Allow all detections for now, can refine later
+    return True
 
 
 def preprocess_for_ocr(image: Image.Image) -> Image.Image:
-    """Prepares the image for OCR by increasing contrast and removing noise."""
+    """Prepares the image for OCR with minimal processing."""
     img_np = np.array(image)
-
-    # Convert to grayscale
     gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-
-    # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
-    clahe = cv2.createCLAHE(clipLimit=5.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(gray)
-
-    # Apply strong thresholding
-    _, binarized = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    return Image.fromarray(binarized)
-
-
-import pytesseract
+    return Image.fromarray(gray)
 
 
 def extract_text_from_image(image: Image.Image) -> str:
-    """Extracts text from image using optimized Tesseract settings."""
-    return pytesseract.image_to_string(
-        image, config="--psm 7 -c tessedit_char_whitelist=0123456789"
-    )
+    """Extracts text from image using OCR."""
+    text = pytesseract.image_to_string(image, config="--psm 7")
+    LOGGER.info(f"📌 OCR Raw Output: {text.strip()}")
+    return text.strip()
 
 
 class DetectionOCRService:
@@ -81,6 +52,11 @@ class DetectionOCRService:
         self.detection_service = None
         self.ocr_service = None
         self.lock = asyncio.Lock()
+
+        # Store intermediate results for API responses
+        self.last_detections = []
+        self.last_ocr_results = []
+        self.last_confidence_score = 0.0
 
     @classmethod
     async def get_instance(cls):
@@ -100,74 +76,73 @@ class DetectionOCRService:
             self.ocr_service = await OCRService.get_instance()
             LOGGER.info("✅ DetectionOCRService initialized.")
 
-    async def process_image(self, image: Image.Image) -> str:
+    async def process_image(self, image: Image.Image) -> List[str]:
         """Runs YOLO detection and OCR pipeline with improved preprocessing."""
+        start_time = time.time()
         detections = await self.detection_service.detector.detect_async(image)
 
         if not detections:
-            LOGGER.warning("⚠ No digits detected.")
-            return ""
+            LOGGER.warning("⚠ No bib numbers detected.")
+            return []
 
+        # Apply bbox validation
         filtered_detections = [d for d in detections if is_valid_bbox(d["bbox"])]
 
         if not filtered_detections:
             LOGGER.warning("⚠ All detections were filtered out.")
-            return ""
+            return []
 
         results = []
+        confidence_scores = []
         image_width, image_height = image.size
+
+        self.last_detections = filtered_detections  # Store detections for API response
+        self.last_ocr_results = []
 
         for idx, detection in enumerate(filtered_detections):
             try:
-                bbox = adjust_bbox(detection["bbox"], image_width, image_height)
+                bbox = detection["bbox"]
+                confidence_scores.append(detection["confidence"])  # Store confidence
+
                 cropped_img = image.crop(bbox)
 
-                # Debug: Save cropped images
-                debug_path = f"debug_crops/crop_{idx}.jpg"
-                cropped_img.save(debug_path)
-                LOGGER.info(f"📷 Saved cropped image: {debug_path} (BBox: {bbox})")
+                # Save cropped images for debugging
+                raw_debug_path = f"debug_crops/raw_crop_{idx}.jpg"
+                cropped_img.save(raw_debug_path)
+                LOGGER.info(
+                    f"📷 Saved raw cropped image: {raw_debug_path} (BBox: {bbox})"
+                )
 
                 # Apply OCR preprocessing
-                cropped_img = preprocess_for_ocr(cropped_img)
+                processed_img = preprocess_for_ocr(cropped_img)
 
-                # Run optimized OCR
-                raw_text = extract_text_from_image(cropped_img)
+                # Save preprocessed image
+                processed_debug_path = f"debug_crops/processed_crop_{idx}.jpg"
+                processed_img.save(processed_debug_path)
+                LOGGER.info(f"📷 Saved processed image: {processed_debug_path}")
+
+                # Run OCR
+                raw_text = extract_text_from_image(processed_img)
                 clean_number = self.ocr_service.clean_numbers(raw_text)
 
                 if clean_number:
-                    results.append(
-                        (clean_number, bbox[0])
-                    )  # Store digit with X-coordinate
+                    results.append(clean_number)
+                    self.last_ocr_results.append(clean_number)
                 else:
                     LOGGER.warning(f"⚠ Empty OCR result for bbox: {bbox}")
 
             except Exception as e:
                 LOGGER.error(f"❌ Failed to process detection: {e}", exc_info=True)
 
-        return self._concatenate_numbers(results)
+        self.last_confidence_score = (
+            round(sum(confidence_scores) / len(confidence_scores), 4)
+            if confidence_scores
+            else 0.0
+        )
+        processing_time = round(time.time() - start_time, 4)
 
-    def _concatenate_numbers(self, results: List[tuple]) -> str:
-        """Concatenates detected digits based on X-coordinates."""
+        LOGGER.info(
+            f"🏅 Final Detected Athlete Numbers: {results} (Processing Time: {processing_time}s, Confidence: {self.last_confidence_score})"
+        )
 
-        LOGGER.info(f"🔍 Inside _concatenate_numbers: {results} (type: {type(results)})")
-
-        if not isinstance(results, list):
-            LOGGER.error(
-                f"❌ Expected a list but got {type(results)}. Check process_image()."
-            )
-            return ""
-
-        if any(not isinstance(item, tuple) for item in results):
-            LOGGER.error(f"❌ Expected list of tuples, but got: {results}")
-            return ""
-
-        digits = [digit for digit, _ in results if digit.strip().isdigit()]
-
-        if not digits:
-            LOGGER.warning("⚠ OCR detected only empty or invalid values.")
-            return ""
-
-        full_number = "".join(digits)
-
-        LOGGER.info(f"🏅 Final athlete number: {full_number}")
-        return full_number
+        return results  # Return list of detected bib numbers

@@ -43,13 +43,13 @@ async def get_detection_service():
         503: {"description": "Service unavailable"},
     },
 )
-async def detect_digits(
+async def detect_bib_numbers(
     file: UploadFile,
     service: DetectionService = Depends(get_detection_service),
     image_handler: ImageHandler = Depends(),
 ) -> DetectionResponse:
     """
-    Detect digits in the uploaded image using the YOLO model.
+    Detect bibs in the uploaded image using the YOLO model.
     Returns detection results and basic metadata.
     """
     try:
