@@ -99,3 +99,16 @@ curl -X 'POST' 'http://127.0.0.1:5566/extract/bib-number' \
     }
 ]
 ```
+
+## Athlete Number Detection Demo
+> This demo page provides an intuitive way to test the Athlete Number Detection API using a simple web interface built with Streamlit.
+
+### Features
+- Upload one or multiple images.
+- Detect athlete bib numbers using YOLO-based detection and OCR.
+
+### Running the Demo
+```bash
+streamlit run frontend/demo.py
+```
+![img.png](artifact/demo.png)

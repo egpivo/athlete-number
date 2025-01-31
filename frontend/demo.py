@@ -25,6 +25,7 @@ def send_images_to_api(images):
         }
 
 
+st.title("Bib Number Detection")
 st.write("Upload images to detect bib numbers.")
 
 uploaded_files = st.file_uploader(
