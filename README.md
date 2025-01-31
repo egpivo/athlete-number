@@ -1,4 +1,6 @@
 # athlete-number
+![Tests](https://github.com/egpivo/athlete-number/actions/workflows/test.yaml/badge.svg) ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+
 This API extracts athlete bib numbers from images using YOLO-based detection and OCR (Tesseract). It supports batch processing for efficient number extraction.
 
 
