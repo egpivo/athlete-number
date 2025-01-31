@@ -28,6 +28,7 @@ torch = "^2.5.1"
 torchvision = "^0.20.1"
 aiofiles = "^24.1.0"
 ultralytics = "^8.3.67"
+streamlit = "^1.41.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest-cov = "^6.0.0"

@@ -15,7 +15,7 @@ router = APIRouter(prefix="/extract", tags=["Athlete Number Extraction"])
 
 
 @router.post(
-    "/bib-number",
+    "/bib-numbers",
     response_model=List[AthleteNumberResponse],
     summary="Extract athlete numbers from multiple images using YOLO and OCR",
     description=(
@@ -31,7 +31,7 @@ router = APIRouter(prefix="/extract", tags=["Athlete Number Extraction"])
         503: {"description": "Service unavailable"},
     },
 )
-async def extract_athlete_number(
+async def extract_athlete_numbers(
     files: List[UploadFile] = File(...),  # Accept multiple files
     image_handler: ImageHandler = Depends(),
     orchestrator: DetectionOCRService = Depends(DetectionOCRService.get_instance),
