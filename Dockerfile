@@ -23,21 +23,20 @@ RUN pip install --upgrade pip && \
 WORKDIR /app
 
 # Copy only the poetry files to leverage Docker cache
-COPY pyproject.toml poetry.lock* athlete_number/ /app/
+COPY pyproject.toml poetry.lock* /app/
 
 # Install dependencies
 RUN poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-ansi  --no-root
+    poetry install --no-interaction --no-ansi --no-root
 
-# Copy the rest of the application code
-COPY .env  models/ /app/
-COPY scripts/start.sh /app/scripts/start.sh
-
-# Expose the port FastAPI will run on
-EXPOSE 5566
+# Copy application code (excluding venv because of .dockerignore)
+COPY . /app/
 
 # Make the start script executable
 RUN chmod +x /app/scripts/start.sh
 
-# Command to run the application in production mode
+# Expose FastAPI port
+EXPOSE 5566
+
+# Run the application
 CMD ["/app/scripts/start.sh"]
