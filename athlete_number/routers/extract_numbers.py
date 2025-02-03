@@ -1,9 +1,11 @@
 from typing import List
 
+import cv2
+import numpy as np
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
 from athlete_number.core.schemas import NumberExtractionResponse
-from athlete_number.services.ocr import extract_text_from_image_file, parse_numbers
+from athlete_number.services.ocr import extract_text_from_image, parse_numbers
 from athlete_number.utils.logger import setup_logger
 
 router = APIRouter(prefix="/extract", tags=["OCR"])
@@ -45,7 +47,12 @@ async def extract_text(
                 LOGGER.warning(f"File {file.filename} is empty.")
                 raise ValueError(f"File {file.filename} is empty or unreadable.")
 
-            extracted_text = extract_text_from_image_file(image_bytes)
+            image_np = np.frombuffer(image_bytes, np.uint8)
+            image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
+            if image is None:
+                raise ValueError("Failed to decode the image, invalid format.")
+
+            extracted_text = extract_text_from_image(image)
             extracted_numbers = parse_numbers(extracted_text)
 
             results.append(

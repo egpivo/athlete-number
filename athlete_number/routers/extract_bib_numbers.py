@@ -104,19 +104,13 @@ async def extract_athlete_numbers(
         try:
             start_time = asyncio.get_event_loop().time()
 
-            # Convert file to image
             image = await image_handler.validate_and_convert(file)
 
-            # Process image through YOLO + OCR
             athlete_numbers = await orchestrator.process_image(image)
 
-            # Calculate processing time
             processing_time = round(asyncio.get_event_loop().time() - start_time, 4)
-
-            # Get model versions
             detection_service = await DetectionService.get_instance()
 
-            # Ensure orchestrator attributes exist
             orchestrator.last_detections = getattr(orchestrator, "last_detections", [])
             orchestrator.last_ocr_results = getattr(
                 orchestrator, "last_ocr_results", []
@@ -125,7 +119,6 @@ async def extract_athlete_numbers(
                 orchestrator, "last_confidence_score", 0.0
             )
 
-            # Prepare structured response for this file
             response_data = {
                 "filename": file.filename,
                 "athlete_numbers": athlete_numbers,
@@ -139,9 +132,12 @@ async def extract_athlete_numbers(
                 },
             }
 
-            LOGGER.info(f"📦 Processed {file.filename}: {response_data}")
+            LOGGER.debug(f"📦 Processed {file.filename}: {response_data}")
 
-            return AthleteNumberResponse(**response_data)
+            return AthleteNumberResponse(
+                filename=response_data["filename"],
+                athlete_numbers=response_data["athlete_numbers"],
+            )
 
         except Exception as e:
             LOGGER.error(f"❌ Failed processing {file.filename}: {e}", exc_info=True)

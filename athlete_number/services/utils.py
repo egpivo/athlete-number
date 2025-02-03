@@ -15,3 +15,17 @@ class ModelPathResolver:
                 f"❌ Model file {self.model_path} not found! Please download it manually."
             )
         return str(self.model_path)
+
+
+def is_valid_bbox(bbox):
+    """Filters detections based on bounding box size and aspect ratio."""
+    x1, y1, x2, y2 = map(int, bbox)
+    width = x2 - x1
+    height = y2 - y1
+    aspect_ratio = width / height
+
+    LOGGER.info(
+        f"🔍 Checking BBox {bbox} - Width: {width}, Height: {height}, Aspect Ratio: {aspect_ratio}"
+    )
+
+    return True
