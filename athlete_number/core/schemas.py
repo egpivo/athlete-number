@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import List
 
 from pydantic import BaseModel
 
@@ -23,8 +23,3 @@ class DetectionResponse(BaseModel):
 class AthleteNumberResponse(BaseModel):
     filename: str
     athlete_numbers: List[str]
-    yolo_detections: List[Dict]
-    ocr_results: List[str]
-    processing_time: float
-    confidence: float
-    model_versions: Dict[str, str]

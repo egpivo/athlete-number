@@ -1,0 +1,85 @@
+# Python-related files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment files (security-sensitive)
+.env.local
+
+# Git-related files
+.git
+.gitignore
+.gitattributes
+.github/
+
+# Docker-related files
+Dockerfile
+.dockerignore
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+desktop.ini
+
+# Build artifacts
+*.log
+*.out
+*.bak
+*.swp
+*.swo
+*.tmp
+
+# Python distribution/build files
+build/
+dist/
+*.egg-info/
+.eggs/
+*.whl
+
+# IDEs and editors
+.idea/
+.vscode/
+*.code-workspace
+
+# Debug and temp folders
+debug_crops/
+debug_ocr_*.jpg
+artifact/
+runs/
+
+# Test files (if not needed in production)
+tests/
+test.py
+
+# Frontend build artifacts (if using React/Vue/Angular)
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+
+# Data files (optional)
+*.csv
+*.tsv
+*.sqlite
+*.db
+*.h5
+*.pth
+*.pt
+*.onnx
+*.pickle
+*.pkl
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
