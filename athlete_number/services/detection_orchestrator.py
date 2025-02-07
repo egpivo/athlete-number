@@ -5,7 +5,7 @@ from typing import List
 
 from PIL import Image
 
-from athlete_number.services.ocr import extract_text_from_image
+from athlete_number.services.ocr import OCRService
 from athlete_number.services.utils import is_valid_bbox
 from athlete_number.utils.logger import setup_logger
 
@@ -40,7 +40,6 @@ class DetectionOCRService:
         """Initialize detection and OCR services."""
         async with self.lock:
             from athlete_number.services.detection import DetectionService
-            from athlete_number.services.ocr import OCRService
 
             self.detection_service = await DetectionService.get_instance()
             self.ocr_service = await OCRService.get_instance()
@@ -67,9 +66,6 @@ class DetectionOCRService:
         if not filtered_detections:
             LOGGER.warning("⚠ All detections were filtered out.")
             return []
-        if not filtered_detections:
-            LOGGER.warning("⚠ All detections were filtered out.")
-            return []
 
         results = []
         confidence_scores = []
@@ -93,8 +89,8 @@ class DetectionOCRService:
                         f"📷 Saved raw cropped image: {raw_debug_path} (BBox: {bbox})"
                     )
 
-                # Run OCR
-                raw_text = extract_text_from_image(cropped_img)
+                # Run OCR using OCRService
+                raw_text = self.ocr_service.extract_text_from_image(cropped_img)
                 clean_number = self.ocr_service.clean_numbers(raw_text)
 
                 if clean_number:
