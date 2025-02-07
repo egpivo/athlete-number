@@ -41,7 +41,7 @@ async def extract_athlete_numbers(
 
     **Process Flow:**
     - **Step 1**: YOLO detects potential bib number regions for each uploaded image.
-    - **Step 2**: OCR extracts text from the detected bib regions.
+    - **Step 2**: GOT-OCR-2.0 extracts text from the detected bib regions.
     - **Step 3**: Returns structured results, including:
       - Detected bib numbers
       - YOLO detection bounding boxes
@@ -59,32 +59,16 @@ async def extract_athlete_numbers(
         {
             "filename": "image1.jpg",
             "athlete_numbers": ["12345"],
-            "yolo_detections": ["bbox_data"],
-            "ocr_results": ["12345"],
-            "processing_time": 0.85,
-            "confidence": 0.98,
-            "model_versions": {
-                "detection": "YOLOv11-Bib",
-                "ocr": "tesseract-v5.3.1"
-            }
         },
         {
             "filename": "image2.jpg",
             "athlete_numbers": ["67890"],
-            "yolo_detections": ["bbox_data"],
-            "ocr_results": ["67890"],
-            "processing_time": 0.92,
-            "confidence": 0.95,
-            "model_versions": {
-                "detection": "YOLOv11-Bib",
-                "ocr": "tesseract-v5.3.1"
-            }
         }
     ]
     ```
 
     **Notes:**
-    - The **OCR model** extracts only numeric values.
+    - The **OCR model (GOT-OCR-2.0)** extracts both **alphanumeric values**.
     - The **YOLO model** detects bib numbers with bounding boxes and confidence scores.
     - If an image fails processing, it will return an empty `"athlete_numbers": []`.
 
@@ -128,7 +112,7 @@ async def extract_athlete_numbers(
                 "confidence": orchestrator.last_confidence_score,
                 "model_versions": {
                     "detection": detection_service.detector.model_version,
-                    "ocr": "tesseract-v5.3.1",
+                    "ocr": "GOT-OCR-2.0",
                 },
             }
 
@@ -141,15 +125,7 @@ async def extract_athlete_numbers(
 
         except Exception as e:
             LOGGER.error(f"❌ Failed processing {file.filename}: {e}", exc_info=True)
-            return AthleteNumberResponse(
-                filename=file.filename,
-                athlete_numbers=[],
-                yolo_detections=[],
-                ocr_results=[],
-                processing_time=0.0,
-                confidence=0.0,
-                model_versions={"detection": "N/A", "ocr": "tesseract-v5.3.1"},
-            )
+            return AthleteNumberResponse(filename=file.filename, athlete_numbers=[])
 
     responses = await asyncio.gather(*(process_single_file(file) for file in files))
 

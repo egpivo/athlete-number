@@ -1,8 +1,10 @@
 import re
 from typing import List
 
+import cv2
 import numpy as np
 import torch
+from PIL import Image
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 from athlete_number.utils.logger import setup_logger
@@ -10,34 +12,23 @@ from athlete_number.utils.logger import setup_logger
 LOGGER = setup_logger(__name__)
 
 
-def clean_ocr_output(text: str) -> str:
-    """Cleans OCR output to remove misclassified characters."""
-    text = text.replace(" ", "")
-    text = re.sub(r"[^0-9a-zA-Z]", "", text)
-    return text
-
-
-def parse_numbers(texts: List[str]) -> List[str]:
-    return [num for text in texts for num in re.findall(r"[0-9a-zA-Z]+", text)]
-
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-
 class OCRService:
     _instance = None
+    _model = "stepfun-ai/GOT-OCR-2.0-hf"
 
     def __init__(self):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
         if OCRService._instance is not None:
             raise RuntimeError(
                 "OCRService is a singleton class. Use get_instance() instead."
             )
 
-        # Load OCR model and processor
-        self.model = AutoModelForImageTextToText.from_pretrained(
-            "stepfun-ai/GOT-OCR-2.0-hf"
-        ).to(device)
-        self.processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+        # Load OCR Model & Processor
+        self.model = AutoModelForImageTextToText.from_pretrained(self._model).to(
+            self.device
+        )
+        self.processor = AutoProcessor.from_pretrained(self._model)
 
     @classmethod
     async def get_instance(cls):
@@ -46,41 +37,68 @@ class OCRService:
             cls._instance = OCRService()
         return cls._instance
 
-    def clean_ocr_output(self, text: str) -> str:
-        """Cleans OCR output to remove misclassified characters."""
-        text = text.replace(" ", "")
-        return re.sub(r"[^0-9a-zA-Z]", "", text)
+    def preprocess_image(
+        self,
+        image: Image.Image,
+        apply_auto_invert: bool = False,
+        auto_invert_threshold: float = 110.0,
+    ) -> np.ndarray:
+        if isinstance(image, Image.Image):
+            image = np.array(image)
 
-    def parse_numbers(self, texts: List[str]) -> List[str]:
-        """Extracts alphanumeric characters from OCR results."""
-        return [num for text in texts for num in re.findall(r"[0-9a-zA-Z]+", text)]
+        if image is None or image.size == 0:
+            raise ValueError("Invalid image for OCR processing.")
 
-    def extract_text_from_image(self, image: np.ndarray) -> str:
-        """Extracts text using GOT-OCR-2.0 instead of Tesseract."""
+        if len(image.shape) == 3:
+            processed = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            processed = image.copy()
+
+        h, w = processed.shape[:2]
+        if w != 0 and w != 500:
+            new_width = 500
+            scale_factor = new_width / w
+            new_height = int(h * scale_factor)
+            processed = cv2.resize(processed, (new_width, new_height))
+
+        if apply_auto_invert:
+            mean_val = np.mean(processed)
+            if mean_val > auto_invert_threshold:
+                processed = cv2.bitwise_not(processed)
+
+        processed_rgb = cv2.cvtColor(processed, cv2.COLOR_GRAY2RGB)
+        return processed_rgb
+
+    def extract_numbers_from_images(self, images: List[Image.Image]) -> List[List[str]]:
         try:
-            # Convert numpy image to PIL Image
-            pil_image = Image.fromarray(image)
+            processed_images = [
+                Image.fromarray(self.preprocess_image(np.array(img))) for img in images
+            ]
+            inputs = self.processor(images=processed_images, return_tensors="pt").to(
+                self.device
+            )
 
-            # Preprocess image
-            inputs = self.processor(images=pil_image, return_tensors="pt").to(device)
-
-            # Run inference
             with torch.no_grad():
-                generated_ids = self.model.generate(**inputs)
+                generated_ids = self.model.generate(
+                    **inputs,
+                    do_sample=False,
+                    tokenizer=self.processor.tokenizer,
+                    stop_strings="<|im_end|>",
+                    max_new_tokens=4096,
+                )
+            extracted_texts = self.processor.batch_decode(
+                generated_ids[:, inputs["input_ids"].shape[1] :],
+                skip_special_tokens=True,
+            )
+            cleaned_numbers = [self.clean_ocr_output(text) for text in extracted_texts]
 
-            # Decode output
-            extracted_text = self.processor.batch_decode(
-                generated_ids, skip_special_tokens=True
-            )[0]
-            results = self.parse_numbers([extracted_text])
-
-            LOGGER.info(f"🔍 GOT-OCR-2.0 Output: {results}")
-            return "".join(results)
+            LOGGER.info(f"🔍 GOT-OCR-2.0 Batch Output: {cleaned_numbers}")
+            return cleaned_numbers
         except Exception as e:
-            LOGGER.exception(f"❌ GOT-OCR-2.0 failed to extract text - {e}.")
-            return ""
+            LOGGER.exception(f"❌ GOT-OCR-2.0 batch processing failed - {e}.")
+            return [[] for _ in images]
 
-    def clean_numbers(self, text: str) -> str:
-        """Extracts numbers and letters from text."""
-        numbers = re.findall(r"[0-9a-zA-Z]+", text)
-        return "".join(numbers) if numbers else ""
+    def clean_ocr_output(self, text: str) -> str:
+        text = text.replace(" ", "")
+        cleaned_text = re.sub(r"[^0-9a-zA-Z]", "", text)
+        return cleaned_text if cleaned_text else "N/A"

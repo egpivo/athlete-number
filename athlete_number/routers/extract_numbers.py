@@ -3,6 +3,7 @@ from typing import List
 import cv2
 import numpy as np
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from PIL import Image
 
 from athlete_number.core.schemas import NumberExtractionResponse
 from athlete_number.services.ocr import OCRService
@@ -32,15 +33,12 @@ async def extract_text(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No files uploaded."
         )
 
-    # Initialize OCR Service
     ocr_service = await OCRService.get_instance()
 
-    results = []
-    for file in files:
-        try:
-            LOGGER.info(f"Processing file: {file.filename}")
-
-            # Read image bytes and decode
+    try:
+        images = []
+        filenames = []
+        for file in files:
             image_bytes = await file.read()
             if not image_bytes:
                 raise ValueError(f"File {file.filename} is empty or unreadable.")
@@ -48,27 +46,34 @@ async def extract_text(
             image_np = np.frombuffer(image_bytes, np.uint8)
             image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
             if image is None:
-                raise ValueError("Failed to decode the image, invalid format.")
-
-            # Use OCRService for text extraction
-            extracted_text = ocr_service.extract_text_from_image(image)
-            extracted_numbers = ocr_service.clean_numbers(extracted_text)
-
-            results.append(
-                NumberExtractionResponse(
-                    filename=file.filename, extracted_number=[extracted_numbers]
+                raise ValueError(
+                    f"Failed to decode image {file.filename}, invalid format."
                 )
-            )
 
-        except ValueError as e:
-            LOGGER.error(f"Error processing {file.filename}: {str(e)}")
-            results.append(
-                NumberExtractionResponse(filename=file.filename, extracted_number=[])
-            )
-        except Exception as e:
-            LOGGER.exception(f"Failed to process {file.filename}: {str(e)}")
-            results.append(
-                NumberExtractionResponse(filename=file.filename, extracted_number=[])
-            )
+            images.append(Image.fromarray(image))
+            filenames.append(file.filename)
 
-    return results
+        extracted_numbers_list = ocr_service.extract_numbers_from_images(images)
+
+        results = [
+            NumberExtractionResponse(
+                filename=filenames[i],
+                extracted_number=extracted_numbers_list[i]
+                if isinstance(extracted_numbers_list[i], list)
+                else [extracted_numbers_list[i]],
+            )
+            for i in range(len(filenames))
+        ]
+
+        return results
+
+    except ValueError as e:
+        LOGGER.error(f"Error processing images: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    except Exception as e:
+        LOGGER.exception(f"Failed to process images: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OCR processing failed.",
+        )
