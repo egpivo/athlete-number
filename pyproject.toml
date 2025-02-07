@@ -32,7 +32,7 @@ accelerate = "^1.3.0"
 sentencepiece = "^0.2.0"
 tiktoken = "^0.8.0"
 verovio = "^5.0.0"
-transformers = {path = "../transformers"}
+transformers = {git = "https://github.com/huggingface/transformers.git"}
 
 [tool.poetry.group.dev.dependencies]
 pytest-cov = "^6.0.0"
