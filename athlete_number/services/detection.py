@@ -14,9 +14,22 @@ LOGGER = setup_logger(__name__)
 
 
 class DigitDetector:
-    def __init__(self, model_path: str):
+    def __init__(
+        self,
+        model_path: str,
+        conf: float = 0.5,
+        iou: float = 0.5,
+        max_det: int = 100,
+        image_size: int = 1280,
+    ):
         self.model_path = model_path
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Detection parameters
+        self.conf = conf
+        self.iou = iou
+        self.max_det = max_det
+        self.image_size = image_size
 
         # Load YOLO model once
         self.model = YOLO(model_path).to(self.device).eval()
@@ -38,8 +51,13 @@ class DigitDetector:
         """Perform digit detection using YOLO model."""
         try:
             img_array = np.array(image)
-            results = self.model.predict(
-                img_array, conf=0.3, classes=list(range(10)), verbose=False
+            results = self.model(
+                img_array,
+                imgsz=self.image_size,
+                conf=self.conf,
+                iou=self.iou,
+                max_det=self.max_det,
+                augment=True,
             )
             return self._format_results(results)
         except Exception as e:
@@ -53,7 +71,7 @@ class DigitDetector:
             for box in result.boxes:
                 xyxy = [
                     float(coord) for sublist in box.xyxy.tolist() for coord in sublist
-                ]  # Flattened
+                ]
                 detections.append(
                     {
                         "class_id": int(box.cls.item()),
@@ -61,7 +79,7 @@ class DigitDetector:
                         "bbox": xyxy,
                     }
                 )
-        return sorted(detections, key=lambda x: x["bbox"][0])  # Sort by X-axis
+        return sorted(detections, key=lambda x: x["bbox"][0])
 
 
 class DetectionService:
@@ -85,7 +103,7 @@ class DetectionService:
                 return
             try:
                 model_path = ModelPathResolver(YOLO_PATH).get_model_path()
-                self.detector = DigitDetector(model_path)  # Load model here
+                self.detector = DigitDetector(model_path)
                 LOGGER.info("✅ Model initialized successfully.")
             except Exception as e:
                 LOGGER.critical(f"❌ Model initialization failed: {e}")

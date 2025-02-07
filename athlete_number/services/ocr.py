@@ -24,7 +24,6 @@ class OCRService:
                 "OCRService is a singleton class. Use get_instance() instead."
             )
 
-        # Load OCR Model & Processor
         self.model = AutoModelForImageTextToText.from_pretrained(self._model).to(
             self.device
         )
@@ -90,7 +89,9 @@ class OCRService:
                 generated_ids[:, inputs["input_ids"].shape[1] :],
                 skip_special_tokens=True,
             )
-            cleaned_numbers = [self.clean_ocr_output(text) for text in extracted_texts]
+            cleaned_numbers = [
+                OCRService.clean_ocr_output(text) for text in extracted_texts
+            ]
 
             LOGGER.info(f"🔍 GOT-OCR-2.0 Batch Output: {cleaned_numbers}")
             return cleaned_numbers
@@ -98,7 +99,8 @@ class OCRService:
             LOGGER.exception(f"❌ GOT-OCR-2.0 batch processing failed - {e}.")
             return [[] for _ in images]
 
-    def clean_ocr_output(self, text: str) -> str:
+    @staticmethod
+    def clean_ocr_output(text: str) -> str:
         text = text.replace(" ", "")
         cleaned_text = re.sub(r"[^0-9a-zA-Z]", "", text)
         return cleaned_text if cleaned_text else "N/A"
