@@ -2,12 +2,11 @@ from typing import List
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
-from PIL import Image
-
 from athlete_number.core.schemas import NumberExtractionResponse
 from athlete_number.services.ocr import OCRService
 from athlete_number.utils.logger import setup_logger
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from PIL import Image
 
 LOGGER = setup_logger(__name__)
 router = APIRouter()

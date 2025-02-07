@@ -1,12 +1,11 @@
 import os
 
 import uvicorn
-from dotenv import load_dotenv
-from fastapi import FastAPI
-
 from athlete_number.routers.detect_bib_numbers import router as detect_router
 from athlete_number.routers.extract_bib_numbers import router as athlete_router
 from athlete_number.routers.extract_numbers import router as extract_router
+from dotenv import load_dotenv
+from fastapi import FastAPI
 
 load_dotenv()
 app = FastAPI()

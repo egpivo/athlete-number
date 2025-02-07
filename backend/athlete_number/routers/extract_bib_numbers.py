@@ -1,13 +1,12 @@
 import asyncio
 from typing import List
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-
 from athlete_number.core.schemas import AthleteNumberResponse
 from athlete_number.services.detection import DetectionService
 from athlete_number.services.detection_orchestrator import DetectionOCRService
 from athlete_number.utils.image_processor import ImageHandler
 from athlete_number.utils.logger import setup_logger
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 LOGGER = setup_logger(__name__)
 

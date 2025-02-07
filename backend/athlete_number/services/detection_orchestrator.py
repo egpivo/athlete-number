@@ -3,10 +3,9 @@ import os
 import time
 from typing import List
 
-from PIL import Image
-
 from athlete_number.services.ocr import OCRService
 from athlete_number.utils.logger import setup_logger
+from PIL import Image
 
 LOGGER = setup_logger(__name__)
 

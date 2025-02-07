@@ -4,10 +4,9 @@ from typing import List
 import cv2
 import numpy as np
 import torch
+from athlete_number.utils.logger import setup_logger
 from PIL import Image
 from transformers import AutoModelForImageTextToText, AutoProcessor
-
-from athlete_number.utils.logger import setup_logger
 
 LOGGER = setup_logger(__name__)
 

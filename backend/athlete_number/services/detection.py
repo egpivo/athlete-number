@@ -3,12 +3,11 @@ from typing import Dict, List
 
 import numpy as np
 import torch
-from PIL import Image
-from ultralytics import YOLO
-
 from athlete_number.core.configs import YOLO_PATH
 from athlete_number.services.utils import ModelPathResolver
 from athlete_number.utils.logger import setup_logger
+from PIL import Image
+from ultralytics import YOLO
 
 LOGGER = setup_logger(__name__)
 
