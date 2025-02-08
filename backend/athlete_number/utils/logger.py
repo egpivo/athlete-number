@@ -1,3 +1,4 @@
+import os
 import logging
 from typing import List, Optional
 
@@ -17,7 +18,11 @@ def setup_logger(
             return not any(msg in record.getMessage() for msg in self.messages)
 
     logger = logging.getLogger(name)
-    logger.setLevel(level)
+
+    if os.getenv("LOG_LEVEL"):
+        logger.setLevel(getattr(logging, os.getenv("LOG_LEVEL").upper(), logging.INFO))
+    else:
+        logger.setLevel(level)
 
     # Remove all handlers associated with the logger
     for handler in logger.handlers[:]:

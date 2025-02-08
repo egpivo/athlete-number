@@ -7,6 +7,8 @@ services:
       dockerfile: Dockerfile.gpu
     deploy:
       resources:
+        limits:
+          memory: 16G
         reservations:
           devices:
             - driver: nvidia
@@ -15,7 +17,9 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - LOG_LEVEL=${LOG_LEVEL}
       - BATCH_SIZE=${BATCH_SIZE}
+      - GUNICORN_WORKERS=1
     env_file:
       - .env
     volumes:
