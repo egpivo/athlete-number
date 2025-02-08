@@ -73,7 +73,9 @@ async def extract_athlete_numbers(
         responses.append(
             AthleteNumberResponse(
                 filename=response_data["filename"],
-                athlete_numbers=response_data["athlete_numbers"],
+                athlete_numbers=extracted_numbers
+                if isinstance(extracted_numbers, list)
+                else [extracted_numbers],
             )
         )
 
