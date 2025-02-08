@@ -1,52 +1,38 @@
-# Stage 1: Build dependencies
-FROM python:3.10-slim AS builder
+# Use a minimal Python base image
+FROM python:3.10-slim AS backend
 
 # Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     libgl1 \
-    libglib2.0-0 \
-    swig \
-    cmake \
-    lsof \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    lsof && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install Poetry properly
+# Install Poetry
 ENV POETRY_VERSION=1.8.2
-RUN curl -sSL https://install.python-poetry.org | python3 -
+RUN curl -sSL https://install.python-poetry.org | python3 - && \
+    echo "export PATH=/root/.local/bin:$PATH" >> /root/.bashrc
 
-# Ensure poetry is in PATH
+# Ensure Poetry is in PATH
 ENV PATH="/root/.local/bin:$PATH"
 
+# Set working directory
 WORKDIR /app
 
+# Copy project files
 COPY pyproject.toml poetry.lock* /app/
 
-# Configure Poetry and install dependencies
+# Install dependencies using Poetry
 RUN poetry config virtualenvs.create false && \
     poetry install --no-interaction --no-ansi --no-root
 
-# Stage 2: Final minimal image
-FROM python:3.10-slim
-
-WORKDIR /app
-
-# Install `lsof`
-RUN apt-get update && apt-get install -y lsof curl && rm -rf /var/lib/apt/lists/*
-
-# Copy Poetry from the builder stage
-COPY --from=builder /root/.local /root/.local
-COPY --from=builder /usr/local/bin/poetry /usr/local/bin/poetry
-COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
-COPY --from=builder /app /app
-
-# Ensure Poetry is in the PATH in the final image
-ENV PATH="/root/.local/bin:$PATH"
-
+# Copy application source code
 COPY . /app/
 
+# Expose the application port
 EXPOSE 5566
 
+# Start the application
 CMD ["bash", "/app/scripts/start.sh"]
