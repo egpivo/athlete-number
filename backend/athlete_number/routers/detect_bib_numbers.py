@@ -4,9 +4,9 @@ from typing import List
 
 from athlete_number.core.schemas import DetectionResponse
 from athlete_number.services.detection import DetectionService
-from athlete_number.utils.image_processor import ImageHandler
 from athlete_number.utils.logger import setup_logger
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from PIL import Image
 
 LOGGER = setup_logger(__name__)
 
@@ -48,9 +48,8 @@ async def get_detection_service():
     },
 )
 async def detect_bib_numbers(
-    files: List[UploadFile] = File(...),  # Accept multiple files
+    files: List[UploadFile] = File(...),
     service: DetectionService = Depends(get_detection_service),
-    image_handler: ImageHandler = Depends(),
 ) -> List[DetectionResponse]:
     """
     Detect bib numbers in multiple uploaded images using the YOLO model.
@@ -63,39 +62,33 @@ async def detect_bib_numbers(
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
 
-    async def process_file(file: UploadFile):
-        try:
-            LOGGER.info(f"Processing file: {file.filename}")
+    try:
+        LOGGER.info(f"Received {len(files)} images for detection.")
 
-            image = await image_handler.validate_and_convert(file)
-            start_time = asyncio.get_event_loop().time()
-            detections = await asyncio.to_thread(service.detector.detect, image)
-            processing_time = asyncio.get_event_loop().time() - start_time
+        images = [Image.open(file.file).convert("RGB") for file in files]
+        filenames = [file.filename for file in files]
 
-            response = DetectionResponse(
-                filename=file.filename,
-                detections=detections,
-                metadata={
-                    "width": image.width,
-                    "height": image.height,
-                    "model_version": service.detector.model_version,
-                    "device": service.detector.device_type,
-                    "processing_time": processing_time,
-                },
+        start_time = asyncio.get_event_loop().time()
+        detections_batch = await asyncio.to_thread(service.detector.detect, images)
+        processing_time = asyncio.get_event_loop().time() - start_time
+
+        results = []
+        for filename, detections, img in zip(filenames, detections_batch, images):
+            results.append(
+                DetectionResponse(
+                    filename=filename,
+                    detections=detections,
+                    metadata={
+                        "width": img.width,
+                        "height": img.height,
+                        "model_version": service.detector.model_version,
+                        "device": service.detector.device_type,
+                        "processing_time": processing_time / len(files),
+                    },
+                )
             )
+        return results
 
-            return response.model_dump()
-        except Exception as e:
-            LOGGER.error(
-                f"Detection failed for {file.filename}: {str(e)}", exc_info=True
-            )
-            response = DetectionResponse(
-                filename=file.filename,
-                detections=[],
-                metadata={"error": "Processing failed"},
-            )
-            return response.model_dump()
-
-    results = await asyncio.gather(*(process_file(file) for file in files))
-
-    return results
+    except Exception as e:
+        LOGGER.error(f"❌ Batch detection failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal processing error.")

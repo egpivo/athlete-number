@@ -1,7 +1,6 @@
 import asyncio
 from typing import Dict, List
 
-import numpy as np
 import torch
 from athlete_number.core.configs import YOLO_PATH
 from athlete_number.services.utils import ModelPathResolver
@@ -24,14 +23,12 @@ class DigitDetector:
         self.model_path = model_path
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        # Detection parameters
         self.conf = conf
         self.iou = iou
         self.max_det = max_det
         self.image_size = image_size
 
-        # Load YOLO model once
-        self.model = YOLO(model_path).to(self.device).eval()
+        self.model = YOLO(model_path).to(self.device)
         self._metadata = {"version": "1.0.0"}
 
     @property
@@ -42,29 +39,26 @@ class DigitDetector:
     def device_type(self) -> str:
         return "gpu" if torch.cuda.is_available() else "cpu"
 
-    async def detect_async(self, image: Image.Image) -> List[Dict]:
+    async def detect_async(self, image: List[Image.Image]) -> List[List[Dict]]:
         """Run detection asynchronously."""
         return await asyncio.to_thread(self.detect, image)
 
-    def detect(self, image: Image.Image) -> List[Dict]:
-        """Perform digit detection using YOLO model."""
+    def detect(self, images: List[Image.Image]) -> List[List[Dict]]:
         try:
-            img_array = np.array(image)
             results = self.model(
-                img_array,
+                images,
                 imgsz=self.image_size,
                 conf=self.conf,
                 iou=self.iou,
                 max_det=self.max_det,
                 augment=True,
             )
-            return self._format_results(results)
+            return [self._format_results(result) for result in results]
         except Exception as e:
             LOGGER.error(f"Inference failed: {e}")
             raise RuntimeError("Detection failed")
 
     def _format_results(self, results) -> List[Dict]:
-        """Format YOLO results into a list of dictionaries."""
         detections = []
         for result in results:
             for box in result.boxes:

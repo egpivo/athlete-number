@@ -35,8 +35,8 @@ class OCRService:
             cls._instance = OCRService()
         return cls._instance
 
+    @staticmethod
     def preprocess_image(
-        self,
         image: Image.Image,
         apply_auto_invert: bool = False,
         auto_invert_threshold: float = 110.0,
@@ -68,9 +68,13 @@ class OCRService:
         return processed_rgb
 
     def extract_numbers_from_images(self, images: List[Image.Image]) -> List[List[str]]:
+        if not images:
+            LOGGER.error("⚠️ No images received for OCR processing.")
+            return []
+
         try:
             processed_images = [
-                Image.fromarray(self.preprocess_image(np.array(img))) for img in images
+                Image.fromarray(OCRService.preprocess_image(image)) for image in images
             ]
             inputs = self.processor(images=processed_images, return_tensors="pt").to(
                 self.device
