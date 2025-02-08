@@ -1,7 +1,11 @@
-# Use NVIDIA CUDA base image for GPU support
+# ===========================
+# 📌 1️⃣ Base Image with CUDA
+# ===========================
 FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04 AS backend
 
-# Install system dependencies (fixes the missing libgthread error)
+# ===========================
+# 📌 2️⃣ Install System Dependencies
+# ===========================
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     python3.10 \
@@ -11,10 +15,13 @@ RUN apt-get update && \
     libgl1 \
     libglib2.0-0 \
     curl \
+    git \
     lsof && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Poetry
+# ===========================
+# 📌 3️⃣ Install Poetry
+# ===========================
 ENV POETRY_VERSION=2.0.1
 RUN curl -sSL https://install.python-poetry.org | python3 - && \
     echo "export PATH=/root/.local/bin:$PATH" >> /root/.bashrc
@@ -22,25 +29,47 @@ RUN curl -sSL https://install.python-poetry.org | python3 - && \
 # Ensure Poetry is in PATH
 ENV PATH="/root/.local/bin:$PATH"
 
-# Set working directory
+# ===========================
+# 📌 4️⃣ Set Working Directory
+# ===========================
 WORKDIR /app
 
-# Copy project files
+# ===========================
+# 📌 5️⃣ Copy Dependencies & Install
+# ===========================
 COPY pyproject.toml poetry.lock* /app/
 
-# Install dependencies using Poetry
+# Install dependencies using Poetry (without creating a virtual environment)
 RUN poetry config virtualenvs.create false && \
     poetry install --no-interaction --no-ansi --no-root
 
-# Copy application source code
+# ===========================
+# 📌 6️⃣ Pre-download Hugging Face Model
+# ===========================
+RUN mkdir -p /app/models/huggingface && \
+    python3 -c "from transformers import AutoModelForImageTextToText, AutoProcessor; \
+                model_name = 'stepfun-ai/GOT-OCR-2.0-hf'; \
+                AutoModelForImageTextToText.from_pretrained(model_name, cache_dir='/app/models/huggingface'); \
+                AutoProcessor.from_pretrained(model_name, cache_dir='/app/models/huggingface')"
+
+# ===========================
+# 📌 7️⃣ Copy Application Source Code
+# ===========================
 COPY . /app/
 
-# Set environment variable for PyTorch/TensorFlow to use GPU
+# ===========================
+# 📌 8️⃣ Set Environment Variables for GPU Support
+# ===========================
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-# Expose the application port
+# ===========================
+# 📌 9️⃣ Expose API Port
+# ===========================
 EXPOSE 5566
 
-# Start the application using Gunicorn with Uvicorn workers
+# ===========================
+# 📌 🔥 1️⃣0️⃣ Start the Application with Gunicorn + Uvicorn
+# ===========================
 CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "600", "--bind", "0.0.0.0:5566", "athlete_number.main:app"]
+
