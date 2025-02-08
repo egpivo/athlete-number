@@ -30,6 +30,25 @@ app.include_router(detect_router)
 app.include_router(athlete_router)
 
 
+@app.get("/warmup")
+async def warmup():
+    """Trigger model loading to prevent cold starts."""
+    LOGGER.info("🚀 Running warm-up inference...")
+
+    detection_service = await DetectionService.get_instance()
+    ocr_service = await OCRService.get_instance()
+
+    dummy_image = Image.new("RGB", (1280, 1280))
+
+    await asyncio.to_thread(detection_service.detector.detect, [dummy_image])
+    await asyncio.to_thread(ocr_service.extract_numbers_from_images, [dummy_image])
+
+    torch.cuda.empty_cache()
+    LOGGER.info("✅ Warm-up complete!")
+    return {"status": "Warm-up successful"}
+
+
+
 @app.on_event("startup")
 async def load_model():
     """Preload the model only once in the main worker."""
