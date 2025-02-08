@@ -1,11 +1,12 @@
 # Use a minimal Python base image
 FROM python:3.10-slim AS backend
 
-# Install system dependencies
+# Install system dependencies (fixes the missing libgthread error)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     libgl1 \
+    libglib2.0-0 \
     curl \
     lsof && \
     rm -rf /var/lib/apt/lists/*
@@ -34,5 +35,5 @@ COPY . /app/
 # Expose the application port
 EXPOSE 5566
 
-# Start the application
-CMD ["bash", "/app/scripts/start.sh"]
+# Start the application using Gunicorn with Uvicorn workers
+CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:5566", "athlete_number.main:app"]
