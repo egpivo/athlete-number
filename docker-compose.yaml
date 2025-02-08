@@ -15,6 +15,11 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - BATCH_SIZE=${BATCH_SIZE}
+    env_file:
+      - .env
+    ports:
+      - "5566:5566"
     volumes:
       - ./backend:/app
     networks:

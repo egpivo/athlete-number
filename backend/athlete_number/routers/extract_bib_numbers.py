@@ -1,6 +1,8 @@
 import asyncio
+import os
 from typing import List
 
+import torch
 from athlete_number.core.schemas import AthleteNumberResponse
 from athlete_number.services.detection import DetectionService
 from athlete_number.services.detection_orchestrator import DetectionOCRService
@@ -10,6 +12,9 @@ from PIL import Image
 
 LOGGER = setup_logger(__name__)
 router = APIRouter(prefix="/extract", tags=["Athlete Number Extraction"])
+
+# Read batch size from environment variable, default to 2 if not set
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", 2))
 
 
 @router.post(
@@ -39,44 +44,66 @@ async def extract_athlete_numbers(
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
 
-    LOGGER.info(f"Received {len(files)} images for batch processing.")
+    LOGGER.info(
+        f"Received {len(files)} images for batch processing (Batch Size: {BATCH_SIZE})."
+    )
 
     # Load images into memory
     images = [Image.open(file.file).convert("RGB") for file in files]
     filenames = [file.filename for file in files]
 
-    start_time = asyncio.get_event_loop().time()
-    detections_batch = await asyncio.to_thread(
-        detection_service.detector.detect, images
-    )
-    extracted_numbers_batch = await orchestrator.process_images(images)
-    processing_time = round(asyncio.get_event_loop().time() - start_time, 4)
-
     responses = []
-    for filename, detections, extracted_numbers, img in zip(
-        filenames, detections_batch, extracted_numbers_batch, images
-    ):
-        response_data = {
-            "filename": filename,
-            "athlete_numbers": extracted_numbers,
-            "yolo_detections": detections,
-            "processing_time": processing_time / len(files),
-            "confidence": orchestrator.last_confidence_scores,
-            "model_versions": {
-                "detection": detection_service.detector.model_version,
-                "ocr": "GOT-OCR-2.0",
-            },
-        }
 
-        LOGGER.debug(f"📦 Processed {filename}: {response_data}")
+    # Process in Batches
+    for i in range(0, len(images), BATCH_SIZE):
+        batch_images = images[i : i + BATCH_SIZE]
+        batch_filenames = filenames[i : i + BATCH_SIZE]
 
-        responses.append(
-            AthleteNumberResponse(
-                filename=response_data["filename"],
-                athlete_numbers=extracted_numbers
-                if isinstance(extracted_numbers, list)
-                else [extracted_numbers],
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        try:
+            start_time = asyncio.get_event_loop().time()
+
+            # Run Detection & OCR in batch
+            detections_batch = await asyncio.to_thread(
+                detection_service.detector.detect, batch_images
             )
-        )
+            extracted_numbers_batch = await orchestrator.process_images(batch_images)
+            processing_time = round(asyncio.get_event_loop().time() - start_time, 4)
+
+            for filename, detections, extracted_numbers in zip(
+                batch_filenames, detections_batch, extracted_numbers_batch
+            ):
+                response_data = {
+                    "filename": filename,
+                    "athlete_numbers": extracted_numbers,
+                    "yolo_detections": detections,
+                    "processing_time": processing_time / len(batch_images),
+                    "confidence": orchestrator.last_confidence_scores,
+                    "model_versions": {
+                        "detection": detection_service.detector.model_version,
+                        "ocr": "GOT-OCR-2.0",
+                    },
+                }
+
+                LOGGER.debug(f"📦 Processed {filename}: {response_data}")
+
+                responses.append(
+                    AthleteNumberResponse(
+                        filename=response_data["filename"],
+                        athlete_numbers=extracted_numbers
+                        if isinstance(extracted_numbers, list)
+                        else [extracted_numbers],
+                    )
+                )
+
+        except torch.cuda.OutOfMemoryError:
+            LOGGER.error("🔥 CUDA Out of Memory! Reducing batch size may help.")
+            torch.cuda.empty_cache()
+            raise HTTPException(
+                status_code=500,
+                detail="GPU out of memory. Try processing fewer images.",
+            )
 
     return responses
