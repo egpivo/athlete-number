@@ -1,3 +1,4 @@
+import os 
 import requests
 import streamlit as st
 from PIL import Image
@@ -12,7 +13,7 @@ st.set_page_config(
 
 def send_images_to_api(images):
     """Send batch images to the API for processing and return detected bib numbers."""
-    api_url = "http://localhost:5566/extract/bib-numbers"  # Updated API URL
+    api_url = os.getenv("BACKEND_URL", "http://localhost:5566") + "/extract/bib-numbers"
     files = [("files", (img.name, img.getvalue(), "image/jpeg")) for img in images]
     response = requests.post(api_url, files=files)
 

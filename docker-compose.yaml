@@ -4,9 +4,17 @@ services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "5566:5566"
+      dockerfile: Dockerfile.gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     volumes:
       - ./backend:/app
     networks:
@@ -20,6 +28,8 @@ services:
       - "8501:8501"
     depends_on:
       - backend
+    environment:
+      - BACKEND_URL=http://backend:5566
     networks:
       - app_network
 
