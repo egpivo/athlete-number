@@ -1,24 +1,24 @@
 import asyncio
 import os
-import uvicorn
-import torch
-import numpy as np
-from PIL import Image
-from fastapi import FastAPI
-from dotenv import load_dotenv
 
-from athlete_number.services.detection import DetectionService
+import numpy as np
+import torch
+import uvicorn
 from athlete_number.routers.detect_bib_numbers import router as detect_router
 from athlete_number.routers.extract_bib_numbers import router as athlete_router
 from athlete_number.routers.extract_numbers import router as extract_router
+from athlete_number.services.detection import DetectionService
 from athlete_number.utils.logger import setup_logger
-
+from dotenv import load_dotenv
+from fastapi import FastAPI
+from PIL import Image
 
 load_dotenv()
 app = FastAPI()
 
 MODEL_LOADED = False  # Prevent multiple model initializations
 LOGGER = setup_logger(__name__)
+
 
 @app.get("/")
 async def read_main():
@@ -64,4 +64,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
