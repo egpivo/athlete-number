@@ -5,22 +5,22 @@ SHELL := /bin/bash
 # Build and start the services
 build:
 	@echo -e "\033[1;92mBuilding and starting Docker Compose services...\033[0m"
-	@docker-compose up --build -d
+	@docker compose up --build -d
 
 # Start services (without rebuilding)
 start:
 	@echo -e "\033[1;92mStarting Docker Compose services...\033[0m"
-	@docker-compose up -d
+	@docker compose up -d
 
 # Check logs of running services
 logs:
 	@echo -e "\033[1;93mShowing logs for Docker Compose services...\033[0m"
-	@docker-compose logs -f
+	@docker compose logs -f
 
 # Stop services
 stop:
 	@echo -e "\033[1;91mStopping Docker Compose services...\033[0m"
-	@docker-compose down
+	@docker compose down
 
 # Restart services (stop & start)
 restart: stop start
