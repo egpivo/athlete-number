@@ -3,7 +3,7 @@ import requests
 import streamlit as st
 from PIL import Image
 import gc  # Garbage collection
-import uuid  # Generates a unique key to reset file uploader
+import uuid  # Generate unique key to reset file uploader
 
 st.set_page_config(
     page_title="InstAI Bib Number Detection",
@@ -40,13 +40,6 @@ def cleanup_gpu_on_backend():
     """Sends a request to backend to clean GPU memory."""
     api_url = os.getenv("BACKEND_URL", "http://localhost:5566") + "/cleanup-gpu"
     response = requests.post(api_url)
-    
-    if response.status_code == 200:
-        st.success("✅ GPU memory cleaned successfully on backend.")
-    else:
-        st.error(f"⚠ Failed to clean GPU memory. Status: {response.status_code}")
-
-
 
 st.title("InstAI Bib Number Detection")
 st.write("Upload images to detect bib numbers.")
@@ -63,24 +56,24 @@ uploaded_files = st.file_uploader(
 if uploaded_files:
     st.session_state.uploaded_files = uploaded_files
 
-# Align buttons in one row (left = detect, right = clear)
-col_left, col_right = st.columns([1, 1])
+# Arrange buttons: "Detect" (left) and "Clear" (rightmost)
+col_left, col_rightmost = st.columns([4, 1])  # Left button wider, rightmost smaller
 
-# Detect Bib Numbers Button (Left)
 with col_left:
     if st.session_state.uploaded_files and st.button("Detect Bib Numbers"):
         st.write("Processing...")
         st.session_state.detection_results = send_images_to_api(st.session_state.uploaded_files)
+
+        # 🔥 After detection, trigger GPU cleanup
         cleanup_gpu_on_backend()
 
-# Clear All Button (Right) - Resets everything
-with col_right:
+with col_rightmost:
     if st.button("Clear All"):
         st.session_state.uploaded_files = None  # Reset uploaded files
         st.session_state.detection_results = None  # Clear results
-        st.session_state.uploader_key = str(uuid.uuid4())  # Generate a new key to reset uploader
-        gc.collect()  # Free memory
-        st.rerun()  # ✅ Force UI refresh
+        st.session_state.uploader_key = str(uuid.uuid4())  # Reset uploader
+        gc.collect()  # Free CPU memory
+        st.rerun()  # Refresh UI
 
 # Display detection results in full width
 if st.session_state.detection_results and st.session_state.uploaded_files:
