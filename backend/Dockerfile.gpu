@@ -71,5 +71,5 @@ EXPOSE 5566
 # ===========================
 # 📌 🔥 1️⃣0️⃣ Start the Application with Gunicorn + Uvicorn
 # ===========================
-CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "600", "--bind", "0.0.0.0:5566", "athlete_number.main:app"]
+CMD ["gunicorn", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "600", "--bind", "0.0.0.0:5566", "athlete_number.main:app"]
 

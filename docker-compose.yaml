@@ -19,7 +19,7 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - LOG_LEVEL=${LOG_LEVEL}
       - BATCH_SIZE=${BATCH_SIZE}
-      - GUNICORN_WORKERS=1
+      - GUNICORN_WORKERS=2
       - OCR_BATCH_SIZE=2
     env_file:
       - .env
