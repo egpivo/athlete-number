@@ -4,10 +4,9 @@ import requests
 import streamlit as st
 from PIL import Image
 
-company_logo = Image.open("artifact/instai-logo.svg")
 st.set_page_config(
     page_title="InstAI Bib Number Detection",
-    page_icon=company_logo,
+    page_icon="https://cdn.prod.website-files.com/66da7c1fe1ca90cace840157/66e661001167498ba9c12619_thumbnail2.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )
