@@ -4,9 +4,10 @@ import requests
 import streamlit as st
 from PIL import Image
 
+company_logo = Image.open("artifact/instai-logo.svg")
 st.set_page_config(
-    page_title="Bib Number Detection",
-    page_icon="🧑‍💻",
+    page_title="InstAI Bib Number Detection",
+    page_icon=company_logo,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -27,7 +28,7 @@ def send_images_to_api(images):
         }
 
 
-st.title("Bib Number Detection")
+st.title("InstAI Bib Number Detection")
 st.write("Upload images to detect bib numbers.")
 
 uploaded_files = st.file_uploader(
@@ -65,6 +66,6 @@ if uploaded_files:
                         st.write(
                             f"**Detected Bib Number:** {', '.join(map(str, bib_number))}"
                         )
-                        st.json(matching_result)  # Display full JSON response
+                        st.json(matching_result)
                     else:
                         st.warning(f"No result found for {uploaded_file.name}.")

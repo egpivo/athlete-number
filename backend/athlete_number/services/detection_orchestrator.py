@@ -1,5 +1,4 @@
 import asyncio
-import concurrent.futures
 import os
 import time
 from typing import List
@@ -47,73 +46,82 @@ class DetectionOCRService:
     ) -> List[List[str]]:
         start_time = time.time()
 
-        detections_batch = await self.detection_service.detector.detect_async(
-            images
-        )  # Assuming it supports batch
+        detections_batch = await self.detection_service.detector.detect_async(images)
         if not detections_batch:
             LOGGER.warning("⚠ No bib numbers detected in any image.")
-            return []
+            return [
+                [] for _ in images
+            ]  # Ensure result length matches input image count
 
-        cropped_images, confidence_scores = await self.process_detections(
-            images, detections_batch, is_debug
-        )
-        ocr_results = self.ocr_service.extract_numbers_from_images(cropped_images)
+        (
+            cropped_images_per_image,
+            confidence_scores_per_image,
+        ) = await self.process_detections(images, detections_batch, is_debug)
+
+        # Run OCR per image to maintain order
+        ocr_results_per_image = [
+            self.ocr_service.extract_numbers_from_images(cropped_images)
+            for cropped_images in cropped_images_per_image
+        ]
+
+        # 🔥 Flatten confidence scores before averaging
+        flattened_confidence_scores = [
+            score for sublist in confidence_scores_per_image for score in sublist
+        ]
 
         avg_confidence = (
-            round(sum(confidence_scores) / len(confidence_scores), 4)
-            if confidence_scores
+            round(
+                sum(flattened_confidence_scores) / len(flattened_confidence_scores), 4
+            )
+            if flattened_confidence_scores
             else 0.0
         )
+
         self.last_confidence_scores.append(avg_confidence)
 
         processing_time = round(time.time() - start_time, 4)
         LOGGER.info(
-            f"🏅 Final Detected Athlete Numbers: {ocr_results} "
+            f"🏅 Final Detected Athlete Numbers: {ocr_results_per_image} "
             f"(Processing Time: {processing_time}s, Confidence: {avg_confidence})"
         )
 
-        return ocr_results
+        return ocr_results_per_image
 
     async def process_detections(
         self, images: List[Image.Image], detections_batch, is_debug: bool = False
     ):
-        """Optimized function to process multiple detections in parallel."""
-        cropped_images = []
-        confidence_scores = []
+        """Ensure cropped bib numbers remain correctly associated with each image."""
+        cropped_images_per_image = []
+        confidence_scores_per_image = []
 
-        def crop_and_save(image, detection, idx):
-            """Helper function to crop images and optionally save debug images."""
-            try:
-                bbox = detection.get("bbox")
-                confidence = detection.get("confidence", 0.0)
+        for img_idx, detections in enumerate(detections_batch):
+            cropped_images = []
+            confidence_scores = []
 
-                if bbox and confidence >= MIN_CONFIDENCE:
-                    cropped_img = image.crop(bbox)
-                    confidence_scores.append(confidence)
+            for idx, detection in enumerate(
+                detections or []
+            ):  # 🔹 Ensure detections is iterable
+                try:
+                    bbox = detection.get("bbox")
+                    confidence = detection.get("confidence", 0.0)
 
-                    if is_debug:
-                        raw_debug_path = os.path.join(
-                            self._debug_path, f"raw_crop_{idx}.jpg"
-                        )
-                        os.makedirs(os.path.dirname(raw_debug_path), exist_ok=True)
-                        cropped_img.save(raw_debug_path)
+                    if bbox and confidence >= MIN_CONFIDENCE:
+                        cropped_img = images[img_idx].crop(bbox)
+                        cropped_images.append(cropped_img)
+                        confidence_scores.append(confidence)
 
-                    return cropped_img
-            except Exception as e:
-                LOGGER.error(f"❌ Failed to process detection: {e}", exc_info=True)
-            return None
+                        if is_debug:
+                            raw_debug_path = os.path.join(
+                                self._debug_path, f"{img_idx}_crop_{idx}.jpg"
+                            )
+                            os.makedirs(os.path.dirname(raw_debug_path), exist_ok=True)
+                            cropped_img.save(raw_debug_path)
 
-        # 🔥 Use ThreadPoolExecutor for **parallel** cropping
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [
-                executor.submit(crop_and_save, images[img_idx], detection, idx)
-                for img_idx, detections in enumerate(detections_batch)
-                for idx, detection in enumerate(detections)
-            ]
-            cropped_images = [
-                f.result()
-                for f in concurrent.futures.as_completed(futures)
-                if f.result()
-            ]
+                except Exception as e:
+                    LOGGER.error(f"❌ Failed to process detection: {e}", exc_info=True)
 
-        return cropped_images, confidence_scores
+            # 🔹 Ensure lists match input length
+            cropped_images_per_image.append(cropped_images)
+            confidence_scores_per_image.append(confidence_scores)
+
+        return cropped_images_per_image, confidence_scores_per_image
