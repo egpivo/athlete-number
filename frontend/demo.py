@@ -1,8 +1,9 @@
 import os
-
 import requests
 import streamlit as st
 from PIL import Image
+import gc  # Garbage collection
+import uuid  # Generates a unique key to reset file uploader
 
 st.set_page_config(
     page_title="InstAI Bib Number Detection",
@@ -11,6 +12,15 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Initialize session state for uploaded files, results, and file uploader key
+if "uploaded_files" not in st.session_state:
+    st.session_state.uploaded_files = None
+
+if "detection_results" not in st.session_state:
+    st.session_state.detection_results = None
+
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = str(uuid.uuid4())  # Generate a unique key
 
 def send_images_to_api(images):
     """Send batch images to the API for processing and return detected bib numbers."""
@@ -26,45 +36,74 @@ def send_images_to_api(images):
             "status_code": response.status_code,
         }
 
+def cleanup_gpu_on_backend():
+    """Sends a request to backend to clean GPU memory."""
+    api_url = os.getenv("BACKEND_URL", "http://localhost:5566") + "/cleanup-gpu"
+    response = requests.post(api_url)
+    
+    if response.status_code == 200:
+        st.success("✅ GPU memory cleaned successfully on backend.")
+    else:
+        st.error(f"⚠ Failed to clean GPU memory. Status: {response.status_code}")
+
+
 
 st.title("InstAI Bib Number Detection")
 st.write("Upload images to detect bib numbers.")
 
+# File uploader (resets when "Clear All" is clicked)
 uploaded_files = st.file_uploader(
-    "Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True
+    "Choose images...",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=True,
+    key=st.session_state.uploader_key  # Unique key forces reset
 )
 
+# Store uploaded files in session state
 if uploaded_files:
-    if st.button("Detect Bib Numbers"):
+    st.session_state.uploaded_files = uploaded_files
+
+# Align buttons in one row (left = detect, right = clear)
+col_left, col_right = st.columns([1, 1])
+
+# Detect Bib Numbers Button (Left)
+with col_left:
+    if st.session_state.uploaded_files and st.button("Detect Bib Numbers"):
         st.write("Processing...")
-        response = send_images_to_api(uploaded_files)
+        st.session_state.detection_results = send_images_to_api(st.session_state.uploaded_files)
+        cleanup_gpu_on_backend()
 
-        if "error" in response:
-            st.error(f"{response['error']} (Status Code: {response['status_code']})")
-        else:
-            for uploaded_file in uploaded_files:
-                image = Image.open(uploaded_file)
-                matching_result = next(
-                    (res for res in response if res["filename"] == uploaded_file.name),
-                    None,
-                )
+# Clear All Button (Right) - Resets everything
+with col_right:
+    if st.button("Clear All"):
+        st.session_state.uploaded_files = None  # Reset uploaded files
+        st.session_state.detection_results = None  # Clear results
+        st.session_state.uploader_key = str(uuid.uuid4())  # Generate a new key to reset uploader
+        gc.collect()  # Free memory
+        st.rerun()  # ✅ Force UI refresh
 
-                col1, col2 = st.columns([1, 1])
-                with col1:
-                    st.image(
-                        image,
-                        caption=f"Uploaded: {uploaded_file.name}",
-                        use_container_width=True,
-                    )
+# Display detection results in full width
+if st.session_state.detection_results and st.session_state.uploaded_files:
+    for uploaded_file in st.session_state.uploaded_files:
+        image = Image.open(uploaded_file)
+        matching_result = next(
+            (res for res in st.session_state.detection_results if res["filename"] == uploaded_file.name),
+            None,
+        )
 
-                with col2:
-                    if matching_result:
-                        bib_number = matching_result.get(
-                            "athlete_numbers", ["Not detected"]
-                        )
-                        st.write(
-                            f"**Detected Bib Number:** {', '.join(map(str, bib_number))}"
-                        )
-                        st.json(matching_result)
-                    else:
-                        st.warning(f"No result found for {uploaded_file.name}.")
+        col1, col2 = st.columns([1, 2])  # Full width for results
+        with col1:
+            st.image(
+                image,
+                caption=f"Uploaded: {uploaded_file.name}",
+                use_container_width=True,
+            )
+
+        with col2:
+            if matching_result:
+                bib_number = matching_result.get("athlete_numbers", ["Not detected"])
+                st.write(f"**Detected Bib Number:** {', '.join(map(str, bib_number))}")
+                st.json(matching_result)  # Show full JSON response
+            else:
+                st.warning(f"No result found for {uploaded_file.name}.")
+

@@ -48,7 +48,6 @@ async def warmup():
     return {"status": "Warm-up successful"}
 
 
-
 @app.on_event("startup")
 async def load_model():
     """Preload the model only once in the main worker."""
@@ -70,6 +69,13 @@ async def load_model():
     MODEL_LOADED = True  # Mark model as loaded
     torch.cuda.empty_cache()  # Free any unused memory
     LOGGER.info("✅ Model preloaded successfully.")
+
+@app.post("/cleanup-gpu")
+async def cleanup_gpu():
+    """Frees up unused GPU memory without unloading the model."""
+    torch.cuda.empty_cache()
+    torch.cuda.ipc_collect()
+    return {"message": "GPU memory cleaned successfully"}
 
 
 def main():
