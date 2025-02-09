@@ -1,3 +1,4 @@
+import os
 import re
 from typing import List
 
@@ -27,6 +28,10 @@ class OCRService:
             self.device
         )
         self.processor = AutoProcessor.from_pretrained(self._model)
+
+        # 🔥 Read batch size from environment variable, default = 4
+        self.batch_size = int(os.getenv("OCR_BATCH_SIZE", 4))
+        LOGGER.info(f"🔹 OCR batch size set to {self.batch_size}")
 
     @classmethod
     async def get_instance(cls):
@@ -73,31 +78,45 @@ class OCRService:
             return []
 
         try:
-            processed_images = [
-                Image.fromarray(OCRService.preprocess_image(image)) for image in images
-            ]
-            inputs = self.processor(images=processed_images, return_tensors="pt").to(
-                self.device
-            )
+            all_results = []
+            total_images = len(images)
 
-            with torch.no_grad():
-                generated_ids = self.model.generate(
-                    **inputs,
-                    do_sample=False,
-                    tokenizer=self.processor.tokenizer,
-                    stop_strings="<|im_end|>",
-                    max_new_tokens=4096,
+            # 🔥 Process images in batches to avoid OOM
+            for i in range(0, total_images, self.batch_size):
+                batch_images = images[i : i + self.batch_size]
+                LOGGER.info(f"📦 Processing batch {i // self.batch_size + 1}/{-(-total_images // self.batch_size)}")
+
+                processed_images = [
+                    Image.fromarray(OCRService.preprocess_image(image)) for image in batch_images
+                ]
+                inputs = self.processor(images=processed_images, return_tensors="pt").to(
+                    self.device
                 )
-            extracted_texts = self.processor.batch_decode(
-                generated_ids[:, inputs["input_ids"].shape[1] :],
-                skip_special_tokens=True,
-            )
-            cleaned_numbers = [
-                OCRService.clean_ocr_output(text) for text in extracted_texts
-            ]
 
-            LOGGER.info(f"🔍 GOT-OCR-2.0 Batch Output: {cleaned_numbers}")
-            return cleaned_numbers
+                with torch.no_grad():
+                    generated_ids = self.model.generate(
+                        **inputs,
+                        do_sample=False,
+                        tokenizer=self.processor.tokenizer,
+                        stop_strings="<|im_end|>",
+                        max_new_tokens=4096,
+                    )
+                extracted_texts = self.processor.batch_decode(
+                    generated_ids[:, inputs["input_ids"].shape[1] :],
+                    skip_special_tokens=True,
+                )
+                cleaned_numbers = [
+                    OCRService.clean_ocr_output(text) for text in extracted_texts if text
+                ]
+
+                all_results.extend(cleaned_numbers)
+
+                # 🔥 Cleanup GPU memory after each batch
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+
+            LOGGER.info(f"🔍 GOT-OCR-2.0 Final Output: {all_results}")
+            return all_results
         except Exception as e:
             LOGGER.exception(f"❌ GOT-OCR-2.0 batch processing failed - {e}.")
             return [[] for _ in images]
@@ -106,4 +125,5 @@ class OCRService:
     def clean_ocr_output(text: str) -> str:
         text = text.replace(" ", "")
         cleaned_text = re.sub(r"[^0-9a-zA-Z]", "", text)
-        return cleaned_text if cleaned_text else "N/A"
+        return cleaned_text
+

@@ -20,6 +20,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - BATCH_SIZE=${BATCH_SIZE}
       - GUNICORN_WORKERS=1
+      - OCR_BATCH_SIZE=2
     env_file:
       - .env
     volumes:
