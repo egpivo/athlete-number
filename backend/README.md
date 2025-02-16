@@ -1,5 +1,4 @@
-# athlete-number
-![Tests](https://github.com/egpivo/athlete-number/actions/workflows/test.yaml/badge.svg) ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+# Athlete-Number Detection Backend
 
 This API extracts athlete bib numbers from images using YOLO-based detection and OCR (GOT-OCR). It supports batch processing for efficient number extraction.
 
@@ -97,16 +96,3 @@ curl -X 'POST' 'http://127.0.0.1:5566/extract/bib-number' \
     }
 ]
 ```
-
-## Athlete Number Detection Demo
-> This demo page provides an intuitive way to test the Athlete Number Detection API using a simple web interface built with Streamlit.
-
-### Features
-- Upload one or multiple images.
-- Detect athlete bib numbers using YOLO-based detection and OCR.
-
-### Running the Demo
-```bash
-streamlit run frontend/demo.py
-```
-![img.png](artifact/demo.png)
