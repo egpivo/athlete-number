@@ -1,0 +1,38 @@
+# Base image with CUDA
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04 AS backend
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 python3-pip python3.10-venv build-essential \
+    libgl1 libglib2.0-0 curl git lsof && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+ENV POETRY_VERSION=2.0.1 PATH="/root/.local/bin:$PATH"
+RUN curl -sSL https://install.python-poetry.org | python3 - && \
+    echo "export PATH=/root/.local/bin:$PATH" >> /root/.bashrc
+
+# Set working directory
+WORKDIR /app
+
+# Copy dependencies and install
+COPY pyproject.toml poetry.lock* /app/
+RUN poetry config virtualenvs.create false && poetry install --no-interaction --no-ansi --no-root
+
+# Pre-download Hugging Face model
+RUN mkdir -p /app/models/huggingface && python3 -c \
+    "from transformers import AutoModelForImageTextToText, AutoProcessor; \
+     m='stepfun-ai/GOT-OCR-2.0-hf'; d='/app/models/huggingface'; \
+     AutoModelForImageTextToText.from_pretrained(m, cache_dir=d); \
+     AutoProcessor.from_pretrained(m, cache_dir=d)"
+
+# Copy application source code
+COPY . /app/
+
+# Enable GPU support
+ENV NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# Expose API port
+EXPOSE 5566
+
+# Start application
+CMD ["gunicorn", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "600", "--bind", "0.0.0.0:5566", "athlete_number.main:app"]
