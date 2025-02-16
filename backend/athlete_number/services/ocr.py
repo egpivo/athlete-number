@@ -84,14 +84,17 @@ class OCRService:
             # 🔥 Process images in batches to avoid OOM
             for i in range(0, total_images, self.batch_size):
                 batch_images = images[i : i + self.batch_size]
-                LOGGER.info(f"📦 Processing batch {i // self.batch_size + 1}/{-(-total_images // self.batch_size)}")
+                LOGGER.info(
+                    f"📦 Processing batch {i // self.batch_size + 1}/{-(-total_images // self.batch_size)}"
+                )
 
                 processed_images = [
-                    Image.fromarray(OCRService.preprocess_image(image)) for image in batch_images
+                    Image.fromarray(OCRService.preprocess_image(image))
+                    for image in batch_images
                 ]
-                inputs = self.processor(images=processed_images, return_tensors="pt").to(
-                    self.device
-                )
+                inputs = self.processor(
+                    images=processed_images, return_tensors="pt"
+                ).to(self.device)
 
                 with torch.no_grad():
                     generated_ids = self.model.generate(
@@ -106,7 +109,9 @@ class OCRService:
                     skip_special_tokens=True,
                 )
                 cleaned_numbers = [
-                    OCRService.clean_ocr_output(text) for text in extracted_texts if text
+                    OCRService.clean_ocr_output(text)
+                    for text in extracted_texts
+                    if text
                 ]
 
                 all_results.extend(cleaned_numbers)
@@ -126,4 +131,3 @@ class OCRService:
         text = text.replace(" ", "")
         cleaned_text = re.sub(r"[^0-9a-zA-Z]", "", text)
         return cleaned_text
-

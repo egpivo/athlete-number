@@ -1,9 +1,10 @@
+import gc  # Garbage collection
 import os
+import uuid  # Generate unique key to reset file uploader
+
 import requests
 import streamlit as st
 from PIL import Image
-import gc  # Garbage collection
-import uuid  # Generate unique key to reset file uploader
 
 st.set_page_config(
     page_title="InstAI Bib Number Detection",
@@ -22,6 +23,7 @@ if "detection_results" not in st.session_state:
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = str(uuid.uuid4())  # Generate a unique key
 
+
 def send_images_to_api(images):
     """Send batch images to the API for processing and return detected bib numbers."""
     api_url = os.getenv("BACKEND_URL", "http://localhost:5566") + "/extract/bib-numbers"
@@ -36,10 +38,12 @@ def send_images_to_api(images):
             "status_code": response.status_code,
         }
 
+
 def cleanup_gpu_on_backend():
     """Sends a request to backend to clean GPU memory."""
     api_url = os.getenv("BACKEND_URL", "http://localhost:5566") + "/cleanup-gpu"
-    response = requests.post(api_url)
+    requests.post(api_url)
+
 
 st.title("InstAI Bib Number Detection")
 st.write("Upload images to detect bib numbers.")
@@ -49,7 +53,7 @@ uploaded_files = st.file_uploader(
     "Choose images...",
     type=["jpg", "jpeg", "png"],
     accept_multiple_files=True,
-    key=st.session_state.uploader_key  # Unique key forces reset
+    key=st.session_state.uploader_key,  # Unique key forces reset
 )
 
 # Store uploaded files in session state
@@ -62,7 +66,9 @@ col_left, col_rightmost = st.columns([4, 1])  # Left button wider, rightmost sma
 with col_left:
     if st.session_state.uploaded_files and st.button("Detect Bib Numbers"):
         st.write("Processing...")
-        st.session_state.detection_results = send_images_to_api(st.session_state.uploaded_files)
+        st.session_state.detection_results = send_images_to_api(
+            st.session_state.uploaded_files
+        )
 
         # 🔥 After detection, trigger GPU cleanup
         cleanup_gpu_on_backend()
@@ -80,7 +86,11 @@ if st.session_state.detection_results and st.session_state.uploaded_files:
     for uploaded_file in st.session_state.uploaded_files:
         image = Image.open(uploaded_file)
         matching_result = next(
-            (res for res in st.session_state.detection_results if res["filename"] == uploaded_file.name),
+            (
+                res
+                for res in st.session_state.detection_results
+                if res["filename"] == uploaded_file.name
+            ),
             None,
         )
 
@@ -99,4 +109,3 @@ if st.session_state.detection_results and st.session_state.uploaded_files:
                 st.json(matching_result)  # Show full JSON response
             else:
                 st.warning(f"No result found for {uploaded_file.name}.")
-

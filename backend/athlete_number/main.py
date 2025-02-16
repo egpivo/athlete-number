@@ -70,6 +70,7 @@ async def load_model():
     torch.cuda.empty_cache()  # Free any unused memory
     LOGGER.info("✅ Model preloaded successfully.")
 
+
 @app.post("/cleanup-gpu")
 async def cleanup_gpu():
     """Frees up unused GPU memory without unloading the model."""
