@@ -1,3 +1,4 @@
+import argparse
 import os
 from io import BytesIO
 
@@ -9,12 +10,23 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description="Batch process images from S3")
+parser.add_argument(
+    "--max_images", type=int, default=50, help="Maximum number of images to process"
+)
+parser.add_argument(
+    "--batch_size", type=int, default=10, help="Number of images to process per batch"
+)
+args = parser.parse_args()
+
 # AWS S3 Configurations
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
 AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
 DEST_BUCKET = os.getenv("DEST_BUCKET", "s3://athlete-number")
 DEST_FOLDER = os.getenv("DEST_FOLDER", "webdata-taipei-2025-02/images")
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", 10))  # Default batch size is 10
+BATCH_SIZE = args.batch_size
+MAX_IMAGES = args.max_images
 
 # API Configurations
 API_URL = os.getenv("BACKEND_URL", "http://localhost:5566") + "/extract/bib-numbers"
@@ -31,11 +43,12 @@ def list_s3_images(bucket, prefix):
     """List image files in the given S3 folder."""
     bucket_name = bucket.replace("s3://", "")
     response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-    return [
+    all_images = [
         obj["Key"]
         for obj in response.get("Contents", [])
         if obj["Key"].endswith((".jpg", ".jpeg", ".png"))
     ]
+    return all_images[:MAX_IMAGES]  # Limit number of images processed
 
 
 def download_image(bucket, key):
@@ -103,7 +116,9 @@ def main():
         print("No images found in S3 bucket.")
         return
 
-    print(f"Found {len(image_keys)} images. Processing in batches of {BATCH_SIZE}...")
+    print(
+        f"Found {len(image_keys)} images (max {MAX_IMAGES}). Processing in batches of {BATCH_SIZE}..."
+    )
 
     # Process in batches
     for i in range(0, len(image_keys), BATCH_SIZE):
