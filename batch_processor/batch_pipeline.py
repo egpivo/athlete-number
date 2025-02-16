@@ -70,9 +70,21 @@ def send_images_to_api(images):
         return []
 
 
+def process_results(results):
+    """Convert API response to structured format for CSV saving."""
+    rows = []
+    for result in results:
+        filename = result["filename"].split("/")[-1]  # Extract filename from full path
+        filename = filename.split("_tn_")[0]  # Remove unnecessary suffix after '_tn_'
+        for tag in result["athlete_numbers"]:
+            rows.append([filename, tag])
+    return rows
+
+
 def save_results_to_csv(results, output_file="detection_results.csv"):
     """Append detection results to a CSV file."""
-    df = pd.DataFrame(results)
+    structured_results = process_results(results)
+    df = pd.DataFrame(structured_results, columns=["photonum", "tag"])
 
     # Append without overwriting
     df.to_csv(
