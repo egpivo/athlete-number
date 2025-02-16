@@ -1,25 +1,22 @@
-import csv
 import os
 from io import BytesIO
 
 import boto3
+import pandas as pd
 import requests
 from dotenv import load_dotenv
 
-# Load environment variables (optional)
+# Load environment variables
 load_dotenv()
 
 # AWS S3 Configurations
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
 AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
-S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
-S3_PREFIX = os.getenv("S3_PREFIX", "")  # Optional folder path inside S3 bucket
+DEST_BUCKET = os.getenv("DEST_BUCKET", "s3://athlete-number")
+DEST_FOLDER = os.getenv("DEST_FOLDER", "webdata-taipei-2025-02/images")
 
 # API Configurations
 API_URL = os.getenv("BACKEND_URL", "http://localhost:5566") + "/extract/bib-numbers"
-
-# CSV Output File
-OUTPUT_CSV = "detection_results.csv"
 
 # Initialize S3 Client
 s3_client = boto3.client(
@@ -29,8 +26,9 @@ s3_client = boto3.client(
 )
 
 
-def list_images_in_s3(bucket_name, prefix=""):
-    """List image files in an S3 bucket."""
+def list_s3_images(bucket, prefix):
+    """List image files in the given S3 folder."""
+    bucket_name = bucket.replace("s3://", "")
     response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
     return [
         obj["Key"]
@@ -39,8 +37,9 @@ def list_images_in_s3(bucket_name, prefix=""):
     ]
 
 
-def download_image_from_s3(bucket_name, key):
+def download_image(bucket, key):
     """Download an image from S3 and return it as a file-like object."""
+    bucket_name = bucket.replace("s3://", "")
     response = s3_client.get_object(Bucket=bucket_name, Key=key)
     return BytesIO(response["Body"].read())
 
@@ -57,26 +56,17 @@ def send_images_to_api(images):
         return []
 
 
-def save_results_to_csv(results, output_file):
+def save_results_to_csv(results, output_file="detection_results.csv"):
     """Save detection results to a CSV file."""
-    with open(output_file, mode="w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(["Filename", "Detected Bib Numbers"])  # Header
-
-        for result in results:
-            filename = result.get("filename", "Unknown")
-            bib_numbers = ", ".join(
-                map(str, result.get("athlete_numbers", ["Not detected"]))
-            )
-            writer.writerow([filename, bib_numbers])
-
+    df = pd.DataFrame(results)
+    df.to_csv(output_file, index=False)
     print(f"Results saved to {output_file}")
 
 
 def main():
-    """Main pipeline to process images from S3 and save results."""
-    print("Fetching image list from S3...")
-    image_keys = list_images_in_s3(S3_BUCKET_NAME, S3_PREFIX)
+    """Main processing pipeline."""
+    print("Fetching images from S3...")
+    image_keys = list_s3_images(DEST_BUCKET, DEST_FOLDER)
 
     if not image_keys:
         print("No images found in S3 bucket.")
@@ -85,12 +75,14 @@ def main():
     print(f"Found {len(image_keys)} images. Downloading and processing...")
 
     # Download images from S3
-    images = [(key, download_image_from_s3(S3_BUCKET_NAME, key)) for key in image_keys]
+    images = [(key, download_image(DEST_BUCKET, key)) for key in image_keys]
 
-    # Send images to API for detection
+    # Send images to API
     print("Sending images to API...")
     detection_results = send_images_to_api(images)
-    save_results_to_csv(detection_results, OUTPUT_CSV)
+
+    # Save results to CSV
+    save_results_to_csv(detection_results)
 
 
 if __name__ == "__main__":
