@@ -1,7 +1,7 @@
 # athlete-number
 ![Tests](https://github.com/egpivo/athlete-number/actions/workflows/test.yaml/badge.svg) ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 
-This API extracts athlete bib numbers from images using YOLO-based detection and OCR (Tesseract). It supports batch processing for efficient number extraction.
+This API extracts athlete bib numbers from images using YOLO-based detection and OCR (GOT-OCR). It supports batch processing for efficient number extraction.
 
 
 ## Setup & Installation
@@ -9,10 +9,6 @@ This API extracts athlete bib numbers from images using YOLO-based detection and
    - Ubuntu/Linux
    - Python 3.10+
    - Poetry (for dependency management)
-   - Tesseract OCR (Required for text extraction)
-       ```bash
-       sudo apt update && sudo apt install -y tesseract-ocr libtesseract-dev
-       ```
 
 - Install Dependencies with Poetry
 
@@ -84,7 +80,7 @@ curl -X 'POST' 'http://127.0.0.1:5566/extract/bib-number' \
         "confidence": 0.98,
         "model_versions": {
             "detection": "YOLOv11-Bib",
-            "ocr": "tesseract-v5.3.1"
+            "ocr": "GOT-OCR-2.0"
         }
     },
     {
@@ -96,7 +92,7 @@ curl -X 'POST' 'http://127.0.0.1:5566/extract/bib-number' \
         "confidence": 0.0,
         "model_versions": {
             "detection": "N/A",
-            "ocr": "tesseract-v5.3.1"
+            "ocr": "GOT-OCR-2.0"
         }
     }
 ]
