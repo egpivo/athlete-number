@@ -8,6 +8,7 @@ from athlete_number.routers.detect_bib_numbers import router as detect_router
 from athlete_number.routers.extract_bib_numbers import router as athlete_router
 from athlete_number.routers.extract_numbers import router as extract_router
 from athlete_number.services.detection import DetectionService
+from athlete_number.services.ocr import OCRService
 from athlete_number.utils.logger import setup_logger
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -16,7 +17,7 @@ from PIL import Image
 load_dotenv()
 app = FastAPI()
 
-MODEL_LOADED = False  # Prevent multiple model initializations
+MODEL_LOADED = False
 LOGGER = setup_logger(__name__)
 
 
