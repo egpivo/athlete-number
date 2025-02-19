@@ -15,3 +15,10 @@
   # Verify installation
   aws --version
   ```
+
+## Usage
+- Note: requiring a live API connection
+
+```python
+python detect_bib_numbers.py --max_images 100 --batch_size 20
+```

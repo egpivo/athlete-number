@@ -27,7 +27,7 @@ athlete-number/
 │   └── README.md
 │
 ├── batch_processor/ # Batch processing pipeline (S3 → API → CSV)
-│   ├── batch_pipeline.py
+│   ├── detect_bib_numbers.py
 │   ├── requirements.txt
 │   ├── .env          # AWS credentials & API config
 │   ├── logs/         # (Optional) Logs for batch runs
