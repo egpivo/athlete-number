@@ -48,7 +48,7 @@ def list_s3_images(bucket, prefix):
         for obj in response.get("Contents", [])
         if obj["Key"].endswith((".jpg", ".jpeg", ".png"))
     ]
-    return all_images[:MAX_IMAGES]  # Limit number of images processed
+    return all_images[:MAX_IMAGES]
 
 
 def download_image(bucket, key):
@@ -57,7 +57,7 @@ def download_image(bucket, key):
     bucket_name = bucket.replace("s3://", "")
     try:
         response = s3_client.get_object(Bucket=bucket_name, Key=key)
-        return BytesIO(response["Body"].read()), key  # Return image content + filename
+        return BytesIO(response["Body"].read()), key
     except Exception as e:
         print(f"Error downloading {key}: {e}")
         return None, key
@@ -83,20 +83,35 @@ def send_images_to_api(images):
         return []
 
 
-def process_results(results):
-    """Convert API response to structured format for CSV saving."""
+def process_results(results, processed_files):
+    """Convert API response to structured format for CSV saving.
+    Ensures every processed file is recorded, even if no numbers are detected.
+    """
     rows = []
+    detected_files = {
+        result["filename"].split("/")[-1].split("_tn_")[0] for result in results
+    }
+
     for result in results:
-        filename = result["filename"].split("/")[-1]  # Extract filename from full path
-        filename = filename.split("_tn_")[0]  # Remove unnecessary suffix after '_tn_'
-        for tag in result["athlete_numbers"]:
-            rows.append([filename, tag])
+        filename = result["filename"].split("/")[-1].split("_tn_")[0]
+        if result["athlete_numbers"]:
+            for tag in result["athlete_numbers"]:
+                rows.append([filename, tag])
+        else:
+            rows.append([filename, None])
+
+    # Ensure all processed files are included, even if API didn't return them
+    for filename in processed_files:
+        clean_filename = filename.split("/")[-1].split("_tn_")[0]
+        if clean_filename not in detected_files:
+            rows.append([clean_filename, None])
+
     return rows
 
 
-def save_results_to_csv(results, output_file="detection_results.csv"):
-    """Append detection results to a CSV file."""
-    structured_results = process_results(results)
+def save_results_to_csv(results, processed_files, output_file="detection_results.csv"):
+    """Append detection results to a CSV file, ensuring all processed files are recorded."""
+    structured_results = process_results(results, processed_files)
     df = pd.DataFrame(structured_results, columns=["photonum", "tag"])
 
     # Append without overwriting
@@ -122,25 +137,18 @@ def main():
 
     # Process in batches
     for i in range(0, len(image_keys), BATCH_SIZE):
-        batch_keys = image_keys[i : i + BATCH_SIZE]  # Get a batch
+        batch_keys = image_keys[i : i + BATCH_SIZE]
 
         print(f"\nProcessing batch {i // BATCH_SIZE + 1}...")
-
-        # Step 1: Download images
         images = [download_image(DEST_BUCKET, key) for key in batch_keys]
-        images = [
-            img for img in images if img[0] is not None
-        ]  # Remove failed downloads
+        images = [img for img in images if img[0] is not None]
 
         if not images:
             print("Skipping batch due to failed downloads.")
             continue
 
-        # Step 2: Process API
         detection_results = send_images_to_api(images)
-
-        # Step 3: Save results
-        save_results_to_csv(detection_results)
+        save_results_to_csv(detection_results, batch_keys)
 
     print("\n✅ Processing complete!")
 
