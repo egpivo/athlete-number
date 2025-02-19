@@ -9,7 +9,7 @@ from PIL import Image
 
 LOGGER = setup_logger(__name__)
 
-MIN_CONFIDENCE = 0.7
+RESIZE_WIDTH = 1024
 
 
 class DetectionOCRService:
@@ -64,7 +64,6 @@ class DetectionOCRService:
             for cropped_images in cropped_images_per_image
         ]
 
-        # 🔥 Flatten confidence scores before averaging
         flattened_confidence_scores = [
             score for sublist in confidence_scores_per_image for score in sublist
         ]
@@ -94,34 +93,56 @@ class DetectionOCRService:
         cropped_images_per_image = []
         confidence_scores_per_image = []
 
-        for img_idx, detections in enumerate(detections_batch):
+        for img_idx, detections in enumerate(detections_batch or []):
             cropped_images = []
             confidence_scores = []
 
-            for idx, detection in enumerate(
-                detections or []
-            ):  # 🔹 Ensure detections is iterable
+            # Ensure every image is accounted for, even if no detections
+            if not detections:
+                cropped_images_per_image.append([])
+                confidence_scores_per_image.append([])
+                continue  # Move to the next image
+
+            for idx, detection in enumerate(detections):
                 try:
                     bbox = detection.get("bbox")
                     confidence = detection.get("confidence", 0.0)
 
-                    if bbox and confidence >= MIN_CONFIDENCE:
+                    if bbox:
                         cropped_img = images[img_idx].crop(bbox)
-                        cropped_images.append(cropped_img)
+                        resized_img = self.resize_image_with_width(
+                            cropped_img, RESIZE_WIDTH
+                        )
+                        cropped_images.append(resized_img)
                         confidence_scores.append(confidence)
 
                         if is_debug:
-                            raw_debug_path = os.path.join(
+                            debug_path = os.path.join(
                                 self._debug_path, f"{img_idx}_crop_{idx}.jpg"
                             )
-                            os.makedirs(os.path.dirname(raw_debug_path), exist_ok=True)
-                            cropped_img.save(raw_debug_path)
+                            os.makedirs(os.path.dirname(debug_path), exist_ok=True)
+                            resized_img.save(debug_path)
 
                 except Exception as e:
-                    LOGGER.error(f"❌ Failed to process detection: {e}", exc_info=True)
+                    LOGGER.error(
+                        f"❌ Failed to process detection for image {img_idx}: {e}",
+                        exc_info=True,
+                    )
 
-            # 🔹 Ensure lists match input length
             cropped_images_per_image.append(cropped_images)
             confidence_scores_per_image.append(confidence_scores)
 
         return cropped_images_per_image, confidence_scores_per_image
+
+    def resize_image_with_width(
+        self, image: Image.Image, desired_width: int
+    ) -> Image.Image:
+        if image is None or image.size[0] == 0 or image.size[1] == 0:
+            raise ValueError("Invalid image for processing.")
+
+        # Calculate new height to maintain aspect ratio
+        original_width, original_height = image.size
+        scale_factor = desired_width / original_width
+        new_height = int(original_height * scale_factor)
+
+        return image.resize((desired_width, new_height), Image.ANTIALIAS)
