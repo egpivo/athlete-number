@@ -10,25 +10,32 @@
 
 ## Folder Structure
 ```plantuml
-├── backend/         # Backend service (YOLO + OCR)
-│   ├── athlete_number/  # Core logic (detection, OCR, API)
-│   ├── models/      # Pretrained model files
-│   ├── tests/       # Unit tests
-│   ├── scripts/     # Startup scripts
-│   ├── pyproject.toml  # Poetry dependencies
-│   ├── Dockerfile.cpu / Dockerfile.gpu
+athlete-number/
+├── backend/         # Backend API (YOLO & OCR)
+│   ├── athlete_number/
+│   ├── models/
+│   ├── tests/
+│   ├── Dockerfile
+│   ├── pyproject.toml
 │   └── README.md
 │
-├── frontend/        # Streamlit-based UI for testing
-│   ├── demo.py      # Main UI script
-│   ├── artifact/    # Demo images
+├── frontend/        # Web-based UI (Streamlit)
+│   ├── demo.py
+│   ├── artifact/
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── README.md
 │
+├── batch_processor/ # Batch processing pipeline (S3 → API → CSV)
+│   ├── detect_bib_numbers.py
+│   ├── requirements.txt
+│   ├── .env          # AWS credentials & API config
+│   ├── logs/         # (Optional) Logs for batch runs
+│   └── README.md
+│
 ├── Makefile         # CLI commands for managing services
 ├── docker-compose.yaml  # Docker service definitions
-└── README.md        # This file
+└── README.md        # Main project README
 ```
 
 ## Start the System with Docker Compose
