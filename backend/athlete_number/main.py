@@ -44,7 +44,8 @@ async def warmup():
     await asyncio.to_thread(detection_service.detector.detect, [dummy_image])
     await asyncio.to_thread(ocr_service.extract_numbers_from_images, [dummy_image])
 
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     LOGGER.info("✅ Warm-up complete!")
     return {"status": "Warm-up successful"}
 
@@ -54,7 +55,7 @@ async def load_model():
     """Preload the model only once in the main worker."""
     global MODEL_LOADED
     if MODEL_LOADED:
-        print("🚀 Model already loaded. Skipping reload.")
+        LOGGER.info("🚀 Model already loaded. Skipping reload.")
         return
 
     LOGGER.info("🔄 Preloading model to avoid cold start...")
@@ -75,9 +76,12 @@ async def load_model():
 @app.post("/cleanup-gpu")
 async def cleanup_gpu():
     """Frees up unused GPU memory without unloading the model."""
-    torch.cuda.empty_cache()
-    torch.cuda.ipc_collect()
-    return {"message": "GPU memory cleaned successfully"}
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+        return {"message": "GPU memory cleaned successfully"}
+    else:
+        return {"message": "CPU Mode"}
 
 
 def main():

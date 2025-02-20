@@ -145,4 +145,4 @@ class DetectionOCRService:
         scale_factor = desired_width / original_width
         new_height = int(original_height * scale_factor)
 
-        return image.resize((desired_width, new_height), Image.ANTIALIAS)
+        return image.resize((desired_width, new_height), Image.LANCZOS)

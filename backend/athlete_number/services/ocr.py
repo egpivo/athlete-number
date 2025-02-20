@@ -74,8 +74,9 @@ class OCRService:
                 all_results.extend(cleaned_numbers)
 
                 # 🔥 Cleanup GPU memory after each batch
-                torch.cuda.empty_cache()
-                torch.cuda.ipc_collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
 
             LOGGER.info(f"🔍 GOT-OCR-2.0 Final Output: {all_results}")
             return all_results
