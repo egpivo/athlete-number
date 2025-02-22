@@ -35,69 +35,61 @@ args = parser.parse_args()
 async def main():
     """Main pipeline: Downloads and processes images in parallel."""
     logger.info("Fetching images from S3...")
+
+    # ✅ Ensure this is only called once
     image_keys = list_s3_images("s3://athlete-number", DEST_FOLDER, args.max_images)
 
     if not image_keys:
-        logger.warning("No images found in S3 bucket.")
+        logger.warning("⚠️ No images found in S3 bucket.")
         return
 
     logger.info(
-        f"Found {len(image_keys)} images. Processing in batches of {args.batch_size}..."
+        f"✅ Found {len(image_keys)} images. Processing in batches of {args.batch_size}..."
     )
 
-    # Initialize OCRService once
     ocr_service = await initialize_ocr()
+    total_batches = (
+        len(image_keys) + args.batch_size - 1
+    ) // args.batch_size  # Ensure correct batch count
 
-    # 🔥 Add a progress bar with `logger`
+    # ✅ Initialize first batch download before the loop
+    pending_downloads = asyncio.create_task(
+        batch_download_images(image_keys[: args.batch_size])
+    )
+
     with tqdm(total=len(image_keys), desc="Processing Images", unit="img") as pbar:
-        pending_downloads = None
-
-        for i in range(0, len(image_keys), args.batch_size):
-            batch_keys = image_keys[i : i + args.batch_size]
+        for batch_index in range(total_batches):
+            start = batch_index * args.batch_size
+            end = min((batch_index + 1) * args.batch_size, len(image_keys))
+            batch_keys = image_keys[start:end]
 
             logger.info(
-                f"🚀 Starting batch {i // args.batch_size + 1} ({len(batch_keys)} images)..."
+                f"🚀 Starting batch {batch_index + 1}/{total_batches} ({len(batch_keys)} images)..."
             )
 
-            # 🔥 Start downloading next batch while processing current batch
-            if pending_downloads is None:
-                # First batch: Start downloading immediately
+            # ✅ Get the previously downloaded batch
+            images = await pending_downloads
+
+            # ✅ Start downloading the next batch only if more images remain
+            if end < len(image_keys):
                 pending_downloads = asyncio.create_task(
-                    batch_download_images(batch_keys)
+                    batch_download_images(image_keys[end : end + args.batch_size])
                 )
-                images = await pending_downloads
             else:
-                # Next batch: Start downloading while processing previous batch
-                new_downloads = asyncio.create_task(batch_download_images(batch_keys))
-                images = await pending_downloads  # Get previous batch's images
-                pending_downloads = new_downloads  # Start new batch download
+                pending_downloads = None  # No more batches to download
 
             if not images:
                 logger.warning("⚠️ Skipping batch due to failed downloads.")
                 continue
 
-            # 🔥 Process images while the next batch is downloading
+            # ✅ Process the downloaded batch
             detection_results = await process_images_with_ocr(ocr_service, images)
             save_results_to_csv(detection_results, batch_keys)
 
-            # ✅ Update progress bar and log progress
             pbar.update(len(batch_keys))
             logger.info(f"✅ Processed {pbar.n}/{len(image_keys)} images.")
 
-        # Ensure the last batch finishes downloading
-        if pending_downloads:
-            final_images = await pending_downloads
-            if final_images:
-                detection_results = await process_images_with_ocr(
-                    ocr_service, final_images
-                )
-                save_results_to_csv(detection_results, batch_keys)
-                pbar.update(len(final_images))
-                logger.info(
-                    f"✅ Processed final batch. Total: {pbar.n}/{len(image_keys)} images."
-                )
-
-    logger.info("🎉✅ Processing complete!")
+        logger.info("🎉✅ Processing complete!")
 
 
 if __name__ == "__main__":
