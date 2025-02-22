@@ -17,8 +17,8 @@
   ```
 
 ## Usage
-- Note: requiring a live API connection
+- The system dynamically selects the optimal batch size based on the OCR batch size (`OCR_BATCH_SIZE`).
 
 ```python
-python detect_bib_numbers.py --max_images 100 --batch_size 20
+python detect_bib_numbers.py --max_images 100
 ```
