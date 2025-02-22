@@ -35,8 +35,6 @@ args = parser.parse_args()
 async def main():
     """Main pipeline: Downloads and processes images in parallel."""
     logger.info("Fetching images from S3...")
-
-    # ✅ Ensure this is only called once
     image_keys = list_s3_images("s3://athlete-number", DEST_FOLDER, args.max_images)
 
     if not image_keys:
@@ -48,11 +46,8 @@ async def main():
     )
 
     ocr_service = await initialize_ocr()
-    total_batches = (
-        len(image_keys) + args.batch_size - 1
-    ) // args.batch_size  # Ensure correct batch count
+    total_batches = (len(image_keys) + args.batch_size - 1) // args.batch_size
 
-    # ✅ Initialize first batch download before the loop
     pending_downloads = asyncio.create_task(
         batch_download_images(image_keys[: args.batch_size])
     )
@@ -82,7 +77,6 @@ async def main():
                 logger.warning("⚠️ Skipping batch due to failed downloads.")
                 continue
 
-            # ✅ Process the downloaded batch
             detection_results = await process_images_with_ocr(ocr_service, images)
             save_results_to_csv(detection_results, batch_keys)
 
