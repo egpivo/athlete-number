@@ -7,6 +7,7 @@ from src.config import DEST_FOLDER, MAX_IMAGES
 from src.ocr_handler import initialize_ocr, process_images_with_ocr
 from src.result_handler import save_results_to_csv
 from src.s3_handler import batch_download_images, list_s3_images
+from tqdm import tqdm
 
 OCR_BATCH_SIZE = int(os.getenv("OCR_BATCH_SIZE", 10))
 
