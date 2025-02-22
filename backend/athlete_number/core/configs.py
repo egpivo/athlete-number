@@ -1,7 +1,14 @@
 import os
 
-from dotenv import load_dotenv
+from athlete_number.utils.logger import setup_logger
 
-load_dotenv()
+logger = setup_logger()
 
-YOLO_PATH = os.getenv("YOLO_PATH", "models/best.pt")
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+YOLO_PATH = os.path.join(BACKEND_DIR, "models/best.pt")
+
+logger.info(f"✅ Using dynamically resolved YOLO model path: {YOLO_PATH}")
+
+# Ensure the model file actually exists
+if not os.path.exists(YOLO_PATH):
+    raise RuntimeError(f"❌ Model file not found at: {YOLO_PATH}")
