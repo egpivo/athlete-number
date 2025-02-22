@@ -1,7 +1,7 @@
 import os
 
 import pandas as pd
-from config import OUTPUT_CSV
+from src.config import OUTPUT_CSV
 
 
 def process_results(results, processed_files):

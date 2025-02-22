@@ -3,8 +3,8 @@ import asyncio
 import boto3
 import cv2
 import numpy as np
-from config import AWS_ACCESS_KEY, AWS_SECRET_KEY, DEST_BUCKET
 from PIL import Image
+from src.config import AWS_ACCESS_KEY, AWS_SECRET_KEY, DEST_BUCKET
 
 # Initialize S3 client
 s3_client = boto3.client(
