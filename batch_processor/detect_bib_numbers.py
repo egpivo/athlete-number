@@ -1,12 +1,19 @@
 import argparse
 import asyncio
+import logging
 
 from src.config import BATCH_SIZE, DEST_FOLDER, MAX_IMAGES
 from src.ocr_handler import initialize_ocr, process_images_with_ocr
 from src.result_handler import save_results_to_csv
 from src.s3_handler import batch_download_images, list_s3_images
+from tqdm import tqdm  # ✅ Import tqdm for progress bar
 
-# Parse command-line arguments
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+
 parser = argparse.ArgumentParser(description="Batch process images from S3")
 parser.add_argument(
     "--max_images",
@@ -24,35 +31,39 @@ args = parser.parse_args()
 
 
 async def main():
-    """Main pipeline for processing images."""
-    print("Fetching images from S3...")
+    """Main pipeline for processing images with structured logging."""
+    logger.info("Fetching images from S3...")
     image_keys = list_s3_images("s3://athlete-number", DEST_FOLDER, args.max_images)
 
     if not image_keys:
-        print("No images found in S3 bucket.")
+        logger.warning("No images found in S3 bucket.")
         return
 
-    print(
+    logger.info(
         f"Found {len(image_keys)} images. Processing in batches of {args.batch_size}..."
     )
-
-    # Initialize OCRService once
     ocr_service = await initialize_ocr()
 
-    for i in range(0, len(image_keys), args.batch_size):
-        batch_keys = image_keys[i : i + args.batch_size]
+    with tqdm(total=len(image_keys), desc="Processing Images", unit="img") as pbar:
+        for i in range(0, len(image_keys), args.batch_size):
+            batch_keys = image_keys[i : i + args.batch_size]
 
-        print(f"\nProcessing batch {i // args.batch_size + 1}...")
-        images = await batch_download_images(batch_keys)
+            logger.info(
+                f"Processing batch {i // args.batch_size + 1} ({len(batch_keys)} images)..."
+            )
+            images = await batch_download_images(batch_keys)
 
-        if not images:
-            print("Skipping batch due to failed downloads.")
-            continue
+            if not images:
+                logger.warning("Skipping batch due to failed downloads.")
+                continue
 
-        detection_results = process_images_with_ocr(ocr_service, images)
-        save_results_to_csv(detection_results, batch_keys)
+            detection_results = await process_images_with_ocr(ocr_service, images)
+            save_results_to_csv(detection_results, batch_keys)
 
-    print("\n✅ Processing complete!")
+            pbar.update(len(batch_keys))
+            logger.info(f"✅ Processed {pbar.n}/{len(image_keys)} images.")
+
+    logger.info("✅ Processing complete!")
 
 
 if __name__ == "__main__":
