@@ -1,5 +1,3 @@
-import asyncio
-
 from athlete_number.core.schemas import NumberExtractionResponse
 from athlete_number.services.detection_orchestrator import DetectionOCRService
 
@@ -9,10 +7,10 @@ async def initialize_ocr():
     return await DetectionOCRService.get_instance()
 
 
-def process_images_with_ocr(ocr_service, images: list):
+async def process_images_with_ocr(ocr_service, images: list):
     """Detect bib numbers using YOLO, then extract numbers using OCR."""
-    extracted_numbers_list = asyncio.run(
-        ocr_service.process_images([img for img, _ in images])
+    extracted_numbers_list = await ocr_service.process_images(
+        [img for img, _ in images]
     )
 
     results = [
