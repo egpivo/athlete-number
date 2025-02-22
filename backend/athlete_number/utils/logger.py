@@ -5,7 +5,7 @@ from typing import List, Optional
 
 def setup_logger(
     name: Optional[str] = None,
-    level: int = logging.DEBUG,
+    level: int = logging.INFO,
     filter_messages: Optional[List[str]] = None,
     log_to_file: bool = False,
     log_filename: str = "application.log",
