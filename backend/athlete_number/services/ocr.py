@@ -27,7 +27,7 @@ class OCRService:
         )
         self.processor = AutoProcessor.from_pretrained(self._model)
 
-        # 🔥 Read batch size from environment variable, default = 4
+        # Read batch size from environment variable, default = 4
         self.batch_size = int(os.getenv("OCR_BATCH_SIZE", 4))
         LOGGER.info(f"🔹 OCR batch size set to {self.batch_size}")
 
@@ -71,9 +71,9 @@ class OCRService:
                 cleaned_numbers = [
                     OCRService.extract_main_number(text) for text in extracted_texts
                 ]
-                all_results.extend(cleaned_numbers)
+                filtered_numbers = [num for num in cleaned_numbers if num]
+                all_results.extend(filtered_numbers)
 
-                # 🔥 Cleanup GPU memory after each batch
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                     torch.cuda.ipc_collect()
