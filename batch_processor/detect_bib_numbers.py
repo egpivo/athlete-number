@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import logging
 import os
 
 from src.config import DEST_FOLDER, MAX_IMAGES
@@ -9,6 +10,10 @@ from src.s3_handler import batch_download_images, list_s3_images
 
 OCR_BATCH_SIZE = int(os.getenv("OCR_BATCH_SIZE", 10))
 
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Batch process images from S3")
