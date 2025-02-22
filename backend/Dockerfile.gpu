@@ -4,7 +4,7 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04 AS backend
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 python3-pip python3.10-venv build-essential \
-    libgl1 libglib2.0-0 curl git lsof && rm -rf /var/lib/apt/lists/*
+    libgl1 libglib2.0-0 curl git lsof swig & rm -rf /var/lib/apt/lists/*
 
 # Install Poetry
 ENV POETRY_VERSION=2.0.1 PATH="/root/.local/bin:$PATH"
