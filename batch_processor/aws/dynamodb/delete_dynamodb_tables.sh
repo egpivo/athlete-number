@@ -5,7 +5,6 @@ AWS_REGION="us-east-1"
 
 # List of tables to delete
 TABLES_TO_DELETE=(
-    "athlete_number_detection_image_ingestion_tracker"
     "athlete_number_detection_image_tracker"
     "athlete_number_detection_job_counter"
 )
