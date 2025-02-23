@@ -1,5 +1,5 @@
 {
-    "TableName": "athlete_number_detection_customers",
+    "TableName": "athlete_number_detection_customer_usage",
     "AttributeDefinitions": [
         { "AttributeName": "customer_id", "AttributeType": "S" }
     ],

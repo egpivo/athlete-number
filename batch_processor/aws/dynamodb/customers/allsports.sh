@@ -20,7 +20,7 @@ CREATED_AT=$(date -u +"%Y-%m-%d")
 TOTAL_IMAGES_PROCESSED=0
 CONTRACT_LIMIT=100000000  # 100M images
 START_DATE="2025-03-01"
-END_DATE="2025-08-31"
+END_DATE="2025-10-31"
 
 # Function to check if a customer exists
 check_customer_exists() {
