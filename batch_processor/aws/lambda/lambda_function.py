@@ -21,111 +21,80 @@ ec2_client = boto3.client("ec2")
 # Constants
 CLIENT_BUCKET = os.getenv("CLIENT_BUCKET", "pc8tw.public")
 DEST_BUCKET = os.getenv("DEST_BUCKET", "athlete-number-detection")
-TODAY_DATE = datetime.utcnow().strftime("%Y-%m-%d")  # Get current date (UTC)
-DEST_FOLDER = f"images/{TODAY_DATE}/"  # Organize by date
-DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE", "JobImageCounter")
-TRACKING_TABLE = os.getenv(
-    "TRACKING_TABLE", "athlete_number_detection_image_ingestion_tracker"
-)
+DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE", "athlete_number_detection_job_counter")
+TRACKING_TABLE = os.getenv("TRACKING_TABLE", "athlete_number_detection_image_tracker")
 IMAGE_THRESHOLD = int(
-    os.getenv("IMAGE_THRESHOLD", 1_000_000)
-)  # Trigger EC2 when this is reached
+    os.getenv("IMAGE_THRESHOLD", 1000000)
+)  # Trigger EC2 when threshold is met
 EC2_INSTANCE_ID = os.getenv("EC2_INSTANCE_ID")  # Load EC2 Instance ID from .env
 
 # Get the current date as JobID
+TODAY_DATE = datetime.utcnow().strftime("%Y-%m-%d")
+DEST_FOLDER = f"images/{TODAY_DATE}/"  # Organize by date
 CURRENT_JOB_ID = TODAY_DATE
 
+# Load and validate prefixes from environment variables
+env_prefixes = os.getenv("PREFIXES", "").split(",")
+env_prefixes = [
+    p.strip() for p in env_prefixes if p.strip()
+]  # Remove empty strings & spaces
 
-def image_already_copied(file_key: str) -> bool:
-    """Check if an image has already been copied by looking it up in DynamoDB."""
-    table = dynamodb.Table(TRACKING_TABLE)
-    response = table.get_item(Key={"FileKey": file_key})
-    return "Item" in response  # If the item exists, it was copied before
-
-
-def mark_image_as_copied(file_key: str, dry_run: bool):
-    """Mark an image as copied in DynamoDB unless dry-run is enabled."""
-    if dry_run:
-        logger.info(f"🛑 Dry-Run: Would mark {file_key} as copied in DynamoDB.")
-        return
-
-    table = dynamodb.Table(TRACKING_TABLE)
-    table.put_item(
-        Item={"FileKey": file_key, "CopiedAt": datetime.utcnow().isoformat()}
-    )
-
-
-def update_image_count(job_id: str, count: int, dry_run: bool):
-    """Update image count for a specific job in DynamoDB unless dry-run is enabled."""
-    if dry_run:
-        logger.info(f"🛑 Dry-Run: Would update image count for {job_id} by {count}.")
-        return 0
-
-    table = dynamodb.Table(DYNAMODB_TABLE)
-
-    response = table.update_item(
-        Key={"JobID": job_id},
-        UpdateExpression="SET ImageCount = if_not_exists(ImageCount, :start) + :count, LastUpdated = :time",
-        ExpressionAttributeValues={
-            ":start": 0,
-            ":count": count,
-            ":time": datetime.utcnow().isoformat(),
-        },
-        ReturnValues="UPDATED_NEW",
-    )
-
-    new_count = response["Attributes"]["ImageCount"]
-    logger.info(f"📊 Updated image count for {job_id}: {new_count}")
-    return new_count
-
-
-def check_and_trigger_ec2(image_count: int):
-    """Trigger an EC2 instance if image count exceeds the threshold."""
-    if image_count >= IMAGE_THRESHOLD:
-        if not EC2_INSTANCE_ID:
-            logger.error("❌ EC2_INSTANCE_ID is not set. Cannot trigger EC2.")
-            return
-
-        logger.info(
-            f"🚀 Image count ({image_count}) exceeded threshold ({IMAGE_THRESHOLD}). Triggering EC2 instance {EC2_INSTANCE_ID}..."
-        )
-        response = ec2_client.start_instances(InstanceIds=[EC2_INSTANCE_ID])
-        logger.info(f"✅ EC2 instance triggered: {response}")
-    else:
-        logger.info(
-            f"🟢 Image count {image_count}/{IMAGE_THRESHOLD}. No EC2 trigger needed."
-        )
+logger.info(f"📂 Available environment prefixes: {env_prefixes}")
 
 
 def lambda_handler(event, context):
     """Process images and only copy non-duplicate ones."""
     try:
-        # **Extract parameters from event payload**
+        # Extract parameters from event payload (overrides environment prefixes)
         dry_run = event.get("dry_run", False)
-        max_files = int(event.get("max_files", 100))  # Default max to 100
-        prefixes = event.get("prefixes")  # Expecting a list of folder prefixes
-        job_id = CURRENT_JOB_ID  # Use today's date as JobID
+        max_files = event.get("max_files", 100)
 
-        # 🚨 **STOP if prefixes are missing, empty, or not a list**
-        if not prefixes or not isinstance(prefixes, list) or len(prefixes) == 0:
+        try:
+            max_files = int(max_files)  # Ensure max_files is an integer
+        except ValueError:
+            logger.error("❌ Invalid 'max_files' value. Must be an integer.")
+            return {
+                "statusCode": 400,
+                "body": json.dumps(
+                    {"error": "Invalid 'max_files'. Must be an integer."}
+                ),
+            }
+
+        event_prefixes = event.get("prefixes", None)
+        processing_prefixes = (
+            event_prefixes if event_prefixes else env_prefixes
+        )  # Use event first, then env
+
+        # 🚨 Stop if no valid prefixes
+        if (
+            not processing_prefixes
+            or not isinstance(processing_prefixes, list)
+            or len(processing_prefixes) == 0
+        ):
             logger.error("❌ No prefixes provided. Cannot proceed.")
             return {
                 "statusCode": 400,
                 "body": json.dumps(
                     {
-                        "error": "No prefixes provided. Please specify folders to process."
+                        "error": "No prefixes provided. Set 'PREFIXES' in Lambda environment or pass them in event."
                     }
                 ),
             }
 
-        logger.info(f"📂 Processing {len(prefixes)} prefix(es): {prefixes}")
+        logger.info(
+            f"📂 Processing {len(processing_prefixes)} prefix(es): {processing_prefixes}"
+        )
 
         # **Process each prefix separately**
         total_copied = 0
-        for prefix in prefixes:
-            logger.info(f"🔎 Listing S3 objects from {CLIENT_BUCKET} (Prefix: {prefix})")
+        for prefix in processing_prefixes:
+            formatted_prefix = f"WEBDATA/{prefix.strip('/')}/"
+
+            logger.info(
+                f"🔎 Listing S3 objects from {CLIENT_BUCKET} (Prefix: {formatted_prefix})"
+            )
             response = s3_client.list_objects_v2(
-                Bucket=CLIENT_BUCKET, Prefix=f"WEBDATA/{prefix}/"
+                Bucket=CLIENT_BUCKET, Prefix=formatted_prefix
             )
 
             if "Contents" not in response:
@@ -143,12 +112,6 @@ def lambda_handler(event, context):
             for file_key in image_files:
                 dest_key = f"{DEST_FOLDER}{os.path.basename(file_key)}"
 
-                # **Check if the image was already copied**
-                if image_already_copied(dest_key):
-                    logger.info(f"🔁 Skipping {file_key}, already copied.")
-                    continue  # Skip duplicate image
-
-                # **Copy Image (Only if NOT Dry-Run)**
                 if not dry_run:
                     copy_source = {"Bucket": CLIENT_BUCKET, "Key": file_key}
                     logger.info(f"📤 Copying {file_key} → {DEST_BUCKET}/{dest_key}")
@@ -158,18 +121,12 @@ def lambda_handler(event, context):
 
                 total_copied += 1
 
-                # **Mark Image as Copied (Only if NOT Dry-Run)**
-                mark_image_as_copied(dest_key, dry_run)
-
-        # **Update Image Count (Only if NOT Dry-Run)**
-        if total_copied > 0:
-            new_count = update_image_count(job_id, total_copied, dry_run)
-            check_and_trigger_ec2(new_count)
-
-        logger.info(f"✅ Job {job_id} completed successfully (Dry-Run: {dry_run}).")
+        logger.info(
+            f"✅ Job {CURRENT_JOB_ID} completed successfully (Dry-Run: {dry_run})."
+        )
         return {
             "statusCode": 200,
-            "body": json.dumps(f"Job {job_id} completed successfully."),
+            "body": json.dumps(f"Job {CURRENT_JOB_ID} completed successfully."),
         }
 
     except Exception as e:
