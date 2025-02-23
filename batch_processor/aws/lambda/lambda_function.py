@@ -102,26 +102,26 @@ def lambda_handler(event, context):
     try:
         # **Extract parameters from event payload**
         dry_run = event.get("dry_run", False)
-        max_files = int(
-            event.get("max_files", 100)
-        )  # Default max to 100 if not provided
+        max_files = int(event.get("max_files", 100))  # Default max to 100
         prefixes = event.get("prefixes")  # Expecting a list of folder prefixes
         job_id = CURRENT_JOB_ID  # Use today's date as JobID
-        total_copied = 0  # Track new images copied for today
 
-        # **Ensure prefixes are provided**
+        # 🚨 **STOP if prefixes are missing, empty, or not a list**
         if not prefixes or not isinstance(prefixes, list) or len(prefixes) == 0:
-            logger.error("❌ Error: No prefixes provided. Cannot proceed.")
+            logger.error("❌ No prefixes provided. Cannot proceed.")
             return {
                 "statusCode": 400,
                 "body": json.dumps(
-                    "Error: No prefixes provided. Please specify folders to process."
+                    {
+                        "error": "No prefixes provided. Please specify folders to process."
+                    }
                 ),
             }
 
         logger.info(f"📂 Processing {len(prefixes)} prefix(es): {prefixes}")
 
         # **Process each prefix separately**
+        total_copied = 0
         for prefix in prefixes:
             logger.info(f"🔎 Listing S3 objects from {CLIENT_BUCKET} (Prefix: {prefix})")
             response = s3_client.list_objects_v2(
@@ -141,7 +141,7 @@ def lambda_handler(event, context):
 
             # **Process each image**
             for file_key in image_files:
-                dest_key = f"{DEST_FOLDER}{os.path.basename(file_key)}"  # Store in images/yyyy-mm-dd/
+                dest_key = f"{DEST_FOLDER}{os.path.basename(file_key)}"
 
                 # **Check if the image was already copied**
                 if image_already_copied(dest_key):
