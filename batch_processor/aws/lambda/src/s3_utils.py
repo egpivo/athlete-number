@@ -10,6 +10,8 @@ s3_client = boto3.client("s3")
 def list_sorted_s3_objects(bucket_name, prefix, offset, batch_size):
     """List S3 objects sorted by LastModified timestamp using offset and batch processing"""
     all_files = []
+    seen_keys = set()  # Track unique file keys to prevent duplicates
+
     paginator = s3_client.get_paginator("list_objects_v2")
     page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
 
@@ -18,16 +20,17 @@ def list_sorted_s3_objects(bucket_name, prefix, offset, batch_size):
             print(f"❌ No files found in prefix: {prefix}")
             continue
 
-        files = [
-            {"Key": obj["Key"], "LastModified": obj["LastModified"]}
-            for obj in page["Contents"]
-        ]
-        all_files.extend(files)
+        for obj in page["Contents"]:
+            if obj["Key"] not in seen_keys:  # Avoid duplicates
+                seen_keys.add(obj["Key"])
+                all_files.append(
+                    {"Key": obj["Key"], "LastModified": obj["LastModified"]}
+                )
 
-    print(f"🔍 Found {len(all_files)} files before sorting for prefix '{prefix}'")
+    print(f"🔍 Found {len(all_files)} unique files before sorting for prefix '{prefix}'")
 
     if not all_files:
-        return []  # Return empty if no files found
+        return []
 
     # Sort by LastModified (most recent first)
     all_files.sort(key=lambda x: x["LastModified"], reverse=True)

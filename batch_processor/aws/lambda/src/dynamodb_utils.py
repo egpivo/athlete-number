@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 import boto3
+from boto3.dynamodb.conditions import Key
 from src.config import CUSTOMER_USAGE_TABLE, IMAGE_TRACKER_TABLE, JOB_COUNTER_TABLE
 
 logger = logging.getLogger()
@@ -12,10 +13,28 @@ def is_duplicate_image(customer_id, image_id):
     """Check if an image has already been processed using IMAGE_TRACKER_TABLE."""
     try:
         table = dynamodb.Table(IMAGE_TRACKER_TABLE)
-        response = table.get_item(
-            Key={"customer_id": customer_id, "image_id": image_id}
+
+        # Normalize image_id to avoid case inconsistencies
+        normalized_image_id = image_id.lower()  # Adjust if necessary
+
+        logger.info(
+            f"🔍 Checking duplicate for {normalized_image_id} - Customer: {customer_id}"
         )
-        return "Item" in response  # Returns True if the file exists (duplicate)
+
+        # Use Query with ConsistentRead for accurate results
+        response = table.query(
+            KeyConditionExpression=Key("customer_id").eq(customer_id)
+            & Key("image_id").eq(normalized_image_id),
+            ConsistentRead=True,  # Ensures up-to-date data
+        )
+
+        is_duplicate = "Items" in response and len(response["Items"]) > 0
+
+        logger.info(
+            f"✅ Duplicate Check Result for {normalized_image_id}: {is_duplicate}"
+        )
+        return is_duplicate
+
     except Exception as e:
         logger.error(f"❌ Error checking duplicate image: {str(e)}", exc_info=True)
         return False

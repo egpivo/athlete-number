@@ -3,7 +3,7 @@ import asyncio
 import logging
 import os
 
-from src.config import DEST_FOLDER, MAX_IMAGES
+from src.config import DEST_BUCKET, DEST_FOLDER, MAX_IMAGES
 from src.ocr_handler import initialize_ocr, process_images_with_ocr
 from src.result_handler import save_results_to_csv
 from src.s3_handler import batch_download_images, list_s3_images
@@ -38,7 +38,7 @@ async def main():
     logger.info("Fetching images from S3...")
 
     # ✅ Ensure max_images limit is respected
-    image_keys = list_s3_images("s3://athlete-number", DEST_FOLDER, args.max_images)
+    image_keys = list_s3_images(DEST_BUCKET, DEST_FOLDER, args.max_images)
 
     if not image_keys:
         logger.warning("⚠️ No images found in S3 bucket.")
