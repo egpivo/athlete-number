@@ -41,6 +41,7 @@ def lambda_handler(event, context):
                 "body": json.dumps({"error": "No prefixes provided."}),
             }
 
+        # Fetch customer usage and verify contract limit
         contract_data = get_customer_usage(customer_id)
         if not contract_data:
             return {
@@ -52,6 +53,7 @@ def lambda_handler(event, context):
             contract_data["contract_limit"] - contract_data["total_images_processed"]
         )
         if remaining_capacity <= 0:
+            logger.warning(f"🚫 Customer {customer_id} exceeded their processing limit.")
             return {
                 "statusCode": 400,
                 "body": json.dumps({"error": "Processing capacity exceeded."}),
@@ -62,9 +64,13 @@ def lambda_handler(event, context):
         )
 
         total_copied = 0
+        remaining_files = min(max_files, remaining_capacity)
         job_id = get_next_job_id(customer_id, TODAY_DATE, BATCH_SIZE)
 
         for prefix in processing_prefixes:
+            if remaining_files <= 0:
+                break  # Stop processing if no files can be copied
+
             formatted_prefix = f"WEBDATA/{prefix.strip('/')}/"
             response = s3_client.list_objects_v2(
                 Bucket=CLIENT_BUCKET, Prefix=formatted_prefix
@@ -76,18 +82,13 @@ def lambda_handler(event, context):
             image_files = [
                 obj["Key"] for obj in response["Contents"] if "_tn_" in obj["Key"]
             ]
-
-            remaining_files = max_files - total_copied
-            if remaining_files <= 0:
-                break
-
-            image_files = image_files[:remaining_files]
+            image_files = image_files[:remaining_files]  # Limit the files to process
 
             for file_key in image_files:
                 if total_copied >= max_files or remaining_capacity <= 0:
-                    break
+                    break  # Stop processing entirely if limits are reached
 
-                image_id = os.path.basename(file_key)  # Extract image_id
+                image_id = os.path.basename(file_key)
 
                 if is_duplicate_image(customer_id, image_id):
                     logger.info(f"⚠️ Skipping duplicate file: {file_key}")
@@ -104,6 +105,7 @@ def lambda_handler(event, context):
                     update_image_tracker(image_id, customer_id, file_key, job_id)
 
                 total_copied += 1
+                remaining_files -= 1
                 remaining_capacity -= 1
 
                 if total_copied % BATCH_SIZE == 0:
@@ -119,4 +121,5 @@ def lambda_handler(event, context):
         }
 
     except Exception as e:
+        logger.error(f"❌ Error in lambda_handler: {str(e)}", exc_info=True)
         return {"statusCode": 500, "body": json.dumps(f"Error: {str(e)}")}
