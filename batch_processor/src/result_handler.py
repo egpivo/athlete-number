@@ -8,7 +8,7 @@ def process_results(results):
     """Convert OCR results into structured format."""
     rows = []
     for result in results:
-        eid, cid, photonum = result.filename.split("/")[-1].split("_")
+        eid, cid, photonum = result.filename.split("/")[-1].split("_")[:3]
         if result.extracted_number:
             for tag in result.extracted_number:
                 rows.append([eid, cid, photonum, tag])
