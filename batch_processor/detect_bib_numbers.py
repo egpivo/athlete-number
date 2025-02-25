@@ -70,7 +70,7 @@ async def main():
 
             # ✅ Process the downloaded batch
             detection_results = await process_images_with_ocr(ocr_service, images)
-            save_results_to_csv(detection_results, batch_keys)
+            save_results_to_csv(detection_results)
 
             pbar.update(len(batch_keys))
             logger.info(f"✅ Processed {pbar.n}/{len(image_keys)} images.")
