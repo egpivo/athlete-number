@@ -5,7 +5,7 @@ import os
 
 from src.config import DEST_BUCKET, DEST_FOLDER, MAX_IMAGES
 from src.ocr_handler import initialize_ocr, process_images_with_ocr
-from src.result_handler import save_results_to_csv
+from src.result_handler import save_results_to_csv, save_results_to_postgres
 from src.s3_handler import batch_download_images, list_s3_images
 from tqdm import tqdm
 
@@ -70,7 +70,12 @@ async def main():
 
             # ✅ Process the downloaded batch
             detection_results = await process_images_with_ocr(ocr_service, images)
+
+            # ✅ Save results to CSV and PostgreSQL
             save_results_to_csv(detection_results)
+
+            # ✅ Insert into PostgreSQL (database logging)
+            save_results_to_postgres(detection_results)
 
             pbar.update(len(batch_keys))
             logger.info(f"✅ Processed {pbar.n}/{len(image_keys)} images.")
