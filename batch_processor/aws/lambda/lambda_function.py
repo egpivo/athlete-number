@@ -1,125 +1,126 @@
-import json
-import logging
+import csv
+import os
+import tempfile
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
-from src.config import (
-    BATCH_SIZE,
-    CLIENT_BUCKET,
-    DEFAULT_CUSTOMER_ID,
-    DEST_BUCKET,
-    DEST_FOLDER,
-    ENV_PREFIXES,
-    TODAY_DATE,
-    os,
-)
-from src.dynamodb_utils import (
-    get_customer_usage,
-    get_next_job_id,
-    is_duplicate_image,
-    update_customer_usage,
-    update_image_tracker,
-    update_job_counter,
-)
-from src.s3_utils import s3_client
+import boto3
+import psycopg2
+from dotenv import load_dotenv
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+# Load environment variables from .env file
+load_dotenv()
+
+# AWS SES Configuration
+ses = boto3.client("ses", region_name="us-east-1")
+SENDER_EMAIL = "joseph.wang@instai.co"
+RECIPIENT_EMAIL = "egpivo@gmail.com"
+SUBJECT = "Athlete Number Detection Report"
+
+# PostgreSQL Connection Details (Loaded from .env)
+DB_HOST = os.getenv("DB_HOST")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PW")  # Make sure it's `DB_PW` and not `DB_PASS`
+DB_PORT = os.getenv("DB_PORT", "5432")  # Default PostgreSQL port
+
+
+def fetch_data():
+    """Fetch detection data from PostgreSQL"""
+    connection = None
+    try:
+        connection = psycopg2.connect(
+            host=DB_HOST, database=DB_NAME, user=DB_USER, password=DB_PASS, port=DB_PORT
+        )
+        cursor = connection.cursor()
+
+        # Query to fetch all records
+        query = """
+        SELECT eid, cid, photonum, tag
+        FROM allsports_bib_number_detection
+        """
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        # Convert data into a list of dictionaries
+        data = [
+            {"eid": row[0], "cid": row[1], "photonum": row[2], "tag": row[3]}
+            for row in rows
+        ]
+
+        return data
+    except Exception as e:
+        print(f"Error fetching data: {e}")
+        return []
+    finally:
+        if connection:
+            connection.close()
+
+
+def generate_csv(data):
+    """Generate CSV from PostgreSQL query results"""
+    temp_dir = tempfile.gettempdir()
+    csv_file = os.path.join(temp_dir, "report.csv")
+
+    with open(csv_file, mode="w", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=data[0].keys())
+        writer.writeheader()
+        writer.writerows(data)
+
+    return csv_file
+
+
+def send_email(csv_file):
+    """Send email with CSV attachment via AWS SES"""
+    with open(csv_file, "rb") as file:
+        csv_data = file.read()
+
+    # Create email
+    msg = MIMEMultipart()
+    msg["From"] = SENDER_EMAIL
+    msg["To"] = RECIPIENT_EMAIL
+    msg["Subject"] = SUBJECT
+    msg.attach(
+        MIMEText("Please find the attached athlete number detection report.", "plain")
+    )
+
+    # Attach CSV file
+    part = MIMEBase("application", "octet-stream")
+    part.set_payload(csv_data)
+    encoders.encode_base64(part)
+    part.add_header("Content-Disposition", "attachment; filename=report.csv")
+    msg.attach(part)
+
+    # Send email via SES
+    response = ses.send_raw_email(
+        Source=SENDER_EMAIL,
+        Destinations=[RECIPIENT_EMAIL],
+        RawMessage={"Data": msg.as_string()},
+    )
+
+    print(f"Email sent! Message ID: {response['MessageId']}")
 
 
 def lambda_handler(event, context):
-    """Process images and update customer usage, image tracker, and job counter."""
-    try:
-        dry_run = event.get("dry_run", False)
-        max_files = event.get("max_files", 100)
-        customer_id = event.get("customer_id", DEFAULT_CUSTOMER_ID)
+    """Main Lambda function"""
+    data = fetch_data()
+    if not data:
+        print("No data found.")
+        return {"statusCode": 200, "body": "No data to send"}
 
-        event_prefixes = event.get("prefixes", None)
-        processing_prefixes = event_prefixes if event_prefixes else ENV_PREFIXES
+    csv_file = generate_csv(data)
+    send_email(csv_file)
 
-        if not processing_prefixes:
-            return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "No prefixes provided."}),
-            }
+    return {"statusCode": 200, "body": "CSV email sent successfully"}
 
-        # Fetch customer usage and verify contract limit
-        contract_data = get_customer_usage(customer_id)
-        if not contract_data:
-            return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "Customer contract not found."}),
-            }
 
-        remaining_capacity = (
-            contract_data["contract_limit"] - contract_data["total_images_processed"]
-        )
-        if remaining_capacity <= 0:
-            logger.warning(f"🚫 Customer {customer_id} exceeded their processing limit.")
-            return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "Processing capacity exceeded."}),
-            }
-
-        logger.info(
-            f"📂 Processing {len(processing_prefixes)} prefix(es): {processing_prefixes}"
-        )
-
-        total_copied = 0
-        remaining_files = min(max_files, remaining_capacity)
-        job_id = get_next_job_id(customer_id, TODAY_DATE, BATCH_SIZE)
-
-        for prefix in processing_prefixes:
-            if remaining_files <= 0:
-                break  # Stop processing if no files can be copied
-
-            formatted_prefix = f"WEBDATA/{prefix.strip('/')}/"
-            response = s3_client.list_objects_v2(
-                Bucket=CLIENT_BUCKET, Prefix=formatted_prefix
-            )
-
-            if "Contents" not in response:
-                continue
-
-            image_files = [
-                obj["Key"] for obj in response["Contents"] if "_tn_" in obj["Key"]
-            ]
-            image_files = image_files[:remaining_files]  # Limit the files to process
-
-            for file_key in image_files:
-                if total_copied >= max_files or remaining_capacity <= 0:
-                    break  # Stop processing entirely if limits are reached
-
-                image_id = os.path.basename(file_key)
-
-                if is_duplicate_image(customer_id, image_id):
-                    logger.info(f"⚠️ Skipping duplicate file: {file_key}")
-                    continue
-
-                dest_key = f"{DEST_FOLDER}{image_id}"
-
-                if not dry_run:
-                    s3_client.copy_object(
-                        Bucket=DEST_BUCKET,
-                        Key=dest_key,
-                        CopySource={"Bucket": CLIENT_BUCKET, "Key": file_key},
-                    )
-                    update_image_tracker(image_id, customer_id, file_key, job_id)
-
-                total_copied += 1
-                remaining_files -= 1
-                remaining_capacity -= 1
-
-                if total_copied % BATCH_SIZE == 0:
-                    job_id = get_next_job_id(customer_id, TODAY_DATE, BATCH_SIZE)
-
-        if total_copied > 0 and not dry_run:
-            update_customer_usage(customer_id, total_copied)
-            update_job_counter(customer_id, job_id, total_copied, BATCH_SIZE)
-
-        return {
-            "statusCode": 200,
-            "body": json.dumps(f"Processed {total_copied} images."),
-        }
-
-    except Exception as e:
-        logger.error(f"❌ Error in lambda_handler: {str(e)}", exc_info=True)
-        return {"statusCode": 500, "body": json.dumps(f"Error: {str(e)}")}
+if __name__ == "__main__":
+    data = fetch_data()
+    if not data:
+        print("No data found.")
+    else:
+        csv_file = generate_csv(data)
+        send_email(csv_file)
+        print("✅ CSV email sent successfully!")

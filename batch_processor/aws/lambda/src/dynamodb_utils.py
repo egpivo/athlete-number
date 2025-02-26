@@ -292,3 +292,25 @@ def get_next_job_id(customer_id, today_date, batch_size):
     except Exception as e:
         logger.error(f"❌ Error retrieving job_id: {str(e)}", exc_info=True)
         return f"{today_date}-01"
+
+
+def batch_update_image_tracker(customer_id, file_list, job_id):
+    table = dynamodb.Table(IMAGE_TRACKER_TABLE)
+
+    if not file_list:
+        logger.warning("⚠️ No files to update in image tracker.")
+        return
+
+    try:
+        with table.batch_writer() as batch:
+            for image_id in file_list:
+                batch.put_item(
+                    Item={
+                        "customer_id": customer_id,
+                        "image_id": image_id,
+                        "job_id": job_id,
+                    }
+                )
+        logger.info(f"✅ Successfully updated {len(file_list)} images in image tracker.")
+    except Exception as e:
+        logger.error(f"❌ Failed to update image tracker: {str(e)}")
