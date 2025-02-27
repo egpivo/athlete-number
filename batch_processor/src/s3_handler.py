@@ -18,10 +18,10 @@ s3_client = boto3.client(
 )
 
 
-def list_s3_images_incremental(
+async def list_s3_images_incremental(
     bucket, prefix, last_processed_key=None, batch_size=1000
 ):
-    """List S3 objects sorted by LastModified while supporting checkpoints."""
+    """Async generator that streams images in batches (Fix for 'async for' error)."""
     paginator = s3_client.get_paginator("list_objects_v2")
     pagination_config = {"Bucket": bucket, "Prefix": prefix, "MaxKeys": batch_size}
 
@@ -30,26 +30,31 @@ def list_s3_images_incremental(
 
     try:
         page_iterator = paginator.paginate(**pagination_config)
+
         for page in page_iterator:
+            await asyncio.sleep(0)  # ✅ Allows async event loop to continue
+
             if "Contents" not in page:
-                return [], None  # No more files
+                break  # No more files
 
-            # Extract file keys and timestamps
-            batch_files = [
-                obj["Key"]
-                for obj in page["Contents"]
-                if obj["Key"].lower().endswith((".jpg", ".jpeg", ".png"))
-            ]
+            batch_files = sorted(
+                (
+                    {"Key": obj["Key"], "LastModified": obj["LastModified"]}
+                    for obj in page["Contents"]
+                    if obj["Key"].lower().endswith((".jpg", ".jpeg", ".png"))
+                ),
+                key=lambda x: x["LastModified"],
+                reverse=True,
+            )
 
-            if not batch_files:
-                return [], None
-
-            next_start_after = batch_files[-1]
-            yield batch_files, next_start_after
+            next_start_after = batch_files[-1]["Key"] if batch_files else None
+            yield [
+                img["Key"] for img in batch_files
+            ], next_start_after  # ✅ Now async generator
 
     except Exception as e:
-        print(f"❌ Error listing S3 objects: {e}")
-        return [], None
+        logger.error(f"❌ Error listing S3 objects: {e}")
+        yield [], None
 
 
 def list_s3_images(bucket: str, prefix: str, max_images: int) -> list:
