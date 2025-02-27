@@ -3,7 +3,7 @@
 # Configuration
 AWS_REGION="us-east-1"
 LAMBDA_FUNCTION_NAME="athlete_number_detection_s3_ingestion_event"
-LAMBDA_SRC_DIR="aws/lambda"
+LAMBDA_SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 S3_BUCKET="athlete-number-detection"
 S3_KEY="lambda_deployments/lambda_function.zip"
 TMP_DIR="/tmp/lambda_package"
@@ -23,20 +23,32 @@ echo "🗑️ Cleaning up previous Lambda package..."
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR"
 
-# Install dependencies in a separate directory
+# Install dependencies in TMP_DIR (to ensure scramp metadata is included)
 echo "📦 Installing dependencies into $TMP_DIR..."
-pip install -r requirements.txt -t "$TMP_DIR" > /dev/null
+pip install --no-cache-dir --upgrade -r requirements.txt -t "$TMP_DIR" > /dev/null
+
+# Verify scramp metadata exists
+if [ ! -d "$TMP_DIR/scramp-1.4.5.dist-info" ]; then
+    echo "⚠️ Warning: scramp metadata not found! Reinstalling..."
+    pip install --no-cache-dir --upgrade scramp -t "$TMP_DIR" > /dev/null
+fi
 
 # Copy only necessary Lambda files
 echo "📂 Copying Lambda source files..."
 rsync -av --exclude="*.pyc" --exclude="__pycache__" "$LAMBDA_SRC_DIR/" "$TMP_DIR/" > /dev/null
 
-# Create a zip package **inside /tmp/lambda_package**
+# Ensure lambda_function.py exists
+if [ ! -f "$TMP_DIR/lambda_function.py" ]; then
+    echo "❌ Error: lambda_function.py is missing!"
+    exit 1
+fi
+
+# Create a zip package **inside TMP_DIR**
 echo "📦 Creating deployment package..."
 cd "$TMP_DIR" || exit 1
 zip -r "$ZIP_FILE" . > /dev/null
 
-# Ensure the ZIP file was created inside /tmp/lambda_package
+# Ensure the ZIP file was created
 if [ ! -f "$ZIP_FILE" ]; then
     echo "❌ Error: Deployment package '$ZIP_FILE' not found in $TMP_DIR!"
     exit 1

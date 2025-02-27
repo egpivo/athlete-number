@@ -7,7 +7,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import boto3
-import psycopg2
+import pg8000
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -16,32 +16,34 @@ load_dotenv()
 # AWS SES Configuration
 ses = boto3.client("ses", region_name="us-east-1")
 SENDER_EMAIL = "joseph.wang@instai.co"
-RECIPIENT_EMAIL = "egpivo@gmail.com"
-SUBJECT = "Athlete Number Detection Report"
+RECIPIENT_EMAILS = ["egpivo@gmail.com", "honami@photocreate.com.tw"]
+PRODUCTION_SUBJECT = "[InstAI] Athlete Number Detection Report"
+TEST_SUBJECT = "[InstAI][Test] Athlete Number Detection Report"
 
 # PostgreSQL Connection Details (Loaded from .env)
 DB_HOST = os.getenv("DB_HOST")
 DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
-DB_PASS = os.getenv("DB_PW")  # Make sure it's `DB_PW` and not `DB_PASS`
-DB_PORT = os.getenv("DB_PORT", "5432")  # Default PostgreSQL port
+DB_PASS = os.getenv("DB_PW")
+DB_PORT = int(os.getenv("DB_PORT", 5432))
 
 
-def fetch_data():
-    """Fetch detection data from PostgreSQL"""
+def fetch_data(cutoff_date, env):
+    """Fetch detection data from PostgreSQL using pg8000"""
     connection = None
     try:
-        connection = psycopg2.connect(
-            host=DB_HOST, database=DB_NAME, user=DB_USER, password=DB_PASS, port=DB_PORT
+        connection = pg8000.connect(
+            host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASS
         )
         cursor = connection.cursor()
 
-        # Query to fetch all records
+        # Query to fetch all records with dynamic filtering
         query = """
         SELECT eid, cid, photonum, tag
         FROM allsports_bib_number_detection
+        WHERE cutoff_date = %s AND env = %s
         """
-        cursor.execute(query)
+        cursor.execute(query, (cutoff_date, env))
         rows = cursor.fetchall()
 
         # Convert data into a list of dictionaries
@@ -52,7 +54,7 @@ def fetch_data():
 
         return data
     except Exception as e:
-        print(f"Error fetching data: {e}")
+        print(f"❌ Error fetching data: {e}")
         return []
     finally:
         if connection:
@@ -72,16 +74,16 @@ def generate_csv(data):
     return csv_file
 
 
-def send_email(csv_file):
-    """Send email with CSV attachment via AWS SES"""
+def send_email(csv_file, env):
+    """Send email with CSV attachment via AWS SES to multiple recipients"""
     with open(csv_file, "rb") as file:
         csv_data = file.read()
 
     # Create email
     msg = MIMEMultipart()
     msg["From"] = SENDER_EMAIL
-    msg["To"] = RECIPIENT_EMAIL
-    msg["Subject"] = SUBJECT
+    msg["To"] = ", ".join(RECIPIENT_EMAILS)  # Multiple recipients
+    msg["Subject"] = TEST_SUBJECT if env == "test" else PRODUCTION_SUBJECT
     msg.attach(
         MIMEText("Please find the attached athlete number detection report.", "plain")
     )
@@ -96,31 +98,28 @@ def send_email(csv_file):
     # Send email via SES
     response = ses.send_raw_email(
         Source=SENDER_EMAIL,
-        Destinations=[RECIPIENT_EMAIL],
+        Destinations=RECIPIENT_EMAILS,
         RawMessage={"Data": msg.as_string()},
     )
 
-    print(f"Email sent! Message ID: {response['MessageId']}")
+    print(
+        f"✅ Email sent to {', '.join(RECIPIENT_EMAILS)}! Message ID: {response['MessageId']}"
+    )
 
 
 def lambda_handler(event, context):
     """Main Lambda function"""
-    data = fetch_data()
+    cutoff_date = event.get("cutoff_date", "2025-02-25")  # Default if not provided
+    env = event.get("env", "test")  # Default to 'test' if not provided
+
+    print(f"🔍 Fetching data for cutoff_date={cutoff_date}, env={env}")
+
+    data = fetch_data(cutoff_date, env)
     if not data:
-        print("No data found.")
+        print("⚠️ No data found.")
         return {"statusCode": 200, "body": "No data to send"}
 
     csv_file = generate_csv(data)
-    send_email(csv_file)
+    send_email(csv_file, env)
 
     return {"statusCode": 200, "body": "CSV email sent successfully"}
-
-
-if __name__ == "__main__":
-    data = fetch_data()
-    if not data:
-        print("No data found.")
-    else:
-        csv_file = generate_csv(data)
-        send_email(csv_file)
-        print("✅ CSV email sent successfully!")

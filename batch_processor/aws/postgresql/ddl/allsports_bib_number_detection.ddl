@@ -1,11 +1,14 @@
 CREATE TABLE allsports_bib_number_detection (
-    eid TEXT NOT NULL,        -- Event ID
-    cid TEXT NOT NULL,        -- Customer ID
-    photonum TEXT NOT NULL,   -- Photo Number
-    tag TEXT NOT NULL,        -- Detected bib number or empty string if none
+    eid TEXT NOT NULL,
+    cid TEXT NOT NULL,
+    photonum TEXT NOT NULL,
+    tag TEXT NOT NULL,
 
-    created_at TIMESTAMPTZ DEFAULT NOW(),  -- Stores the record creation timestamp (UTC)
-    modified_at TIMESTAMPTZ DEFAULT NOW(),  -- Stores the last modification timestamp (UTC)
+    cutoff_date DATE NOT NULL,  -- Partition Key
+    env TEXT NOT NULL CHECK (env IN ('test', 'production')),  -- New column to store the environment
 
-    PRIMARY KEY (eid, cid, photonum)  -- Composite Primary Key to prevent duplicates
-);
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    modified_at TIMESTAMPTZ DEFAULT NOW(),
+
+    PRIMARY KEY (eid, cid, photonum, tag, cutoff_date, env)
+) PARTITION BY RANGE (cutoff_date);
