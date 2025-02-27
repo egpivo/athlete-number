@@ -33,7 +33,7 @@ def get_processed_keys_from_db(image_keys: list, cutoff_date: str) -> set:
             for i in range(0, len(image_keys), chunk_size):
                 chunk = image_keys[i : i + chunk_size]
                 placeholders = ",".join(["%s"] * len(chunk))
-                query = f"SELECT image_key FROM {PROCESSED_KEY_TABLE} WHERE image_key IN ({placeholders}) AND cutoff_date = {cutoff_date}"
+                query = f"SELECT image_key FROM {PROCESSED_KEY_TABLE} WHERE image_key IN ({placeholders}) AND cutoff_date = '{cutoff_date}'"
                 cur.execute(query, chunk)
                 processed.update(row[0] for row in cur.fetchall())
         conn.close()

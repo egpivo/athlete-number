@@ -11,7 +11,7 @@ from src.db_handler import (
     async_write_checkpoint_safely,
 )
 from src.ocr_handler import initialize_ocr, process_images_with_ocr
-from src.result_handler import save_results_to_csv, save_results_to_postgres
+from src.result_handler import save_results_to_postgres
 from src.s3_handler import batch_download_images, list_s3_images_incremental
 from tqdm import tqdm
 
@@ -111,7 +111,6 @@ async def main():
 
             # ✅ Process images asynchronously
             detection_results = await process_images_with_ocr(ocr_service, images)
-            await asyncio.to_thread(save_results_to_csv, detection_results)
             await asyncio.to_thread(
                 save_results_to_postgres, detection_results, args.cutoff_date, args.env
             )
