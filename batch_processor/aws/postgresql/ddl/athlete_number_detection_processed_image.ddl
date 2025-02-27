@@ -1,4 +1,7 @@
 CREATE TABLE athlete_number_detection_processed_image (
-    image_key TEXT PRIMARY KEY,        -- Unique identifier for the processed image
-    processed_at TIMESTAMP DEFAULT NOW()  -- Auto-fills with the current timestamp
+    image_key TEXT NOT NULL,           -- Unique identifier for the processed image
+    cutoff_date DATE NOT NULL,         -- Cutoff date for processing
+    processed_at TIMESTAMP DEFAULT NOW(), -- Auto-fills with the current timestamp
+
+    PRIMARY KEY (image_key, cutoff_date) -- Composite primary key
 );

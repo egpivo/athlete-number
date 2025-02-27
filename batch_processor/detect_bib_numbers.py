@@ -4,20 +4,18 @@ import logging
 import os
 
 from src.config import DEST_BUCKET, DEST_FOLDER, MAX_IMAGES
-from src.ocr_handler import initialize_ocr, process_images_with_ocr
-from src.result_handler import save_results_to_csv, save_results_to_postgres
-from src.s3_handler import batch_download_images
-from tqdm import tqdm
-
-from batch_processor.src.db_handler import (
+from src.db_handler import (
     async_get_last_checkpoint,
     async_get_processed_keys_from_db,
     async_mark_keys_as_processed,
     async_write_checkpoint_safely,
 )
+from src.ocr_handler import initialize_ocr, process_images_with_ocr
+from src.result_handler import save_results_to_csv, save_results_to_postgres
+from src.s3_handler import batch_download_images, list_s3_images_incremental
+from tqdm import tqdm
 
 OCR_BATCH_SIZE = int(os.getenv("OCR_BATCH_SIZE", 10))
-CHECKPOINT_KEY = f"{DEST_FOLDER}/checkpoint.txt"
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -37,6 +35,17 @@ parser.add_argument(
     default=OCR_BATCH_SIZE,
     help="Number of images to process per batch",
 )
+parser.add_argument(
+    "--cutoff_date",
+    type=str,
+    help="Processing date",
+)
+parser.add_argument(
+    "--env",
+    type=str,
+    default="test",
+    help="Environment",
+)
 args = parser.parse_args()
 
 
@@ -45,28 +54,33 @@ async def main():
     logger.info("🚀 Starting incremental image processing...")
 
     # ✅ Read last checkpoint
-    last_processed_key = await async_get_last_checkpoint()
+    last_processed_key = await async_get_last_checkpoint(args.cutoff_date)
     logger.info(f"🔄 Resuming from checkpoint: {last_processed_key or 'Beginning'}")
 
     # ✅ List images from S3 after the last checkpoint
     image_keys, next_start_after = await asyncio.to_thread(
-        bucket_name=DEST_BUCKET,
-        prefix=DEST_FOLDER,
-        batch_size=args.max_images,
-        start_after=last_processed_key,
+        list_s3_images_incremental(
+            bucket=DEST_BUCKET,
+            prefix=f"{DEST_FOLDER}/{args.cutoff_date}",
+            batch_size=args.max_images,
+            last_processed_key=last_processed_key,
+        )
     )
+
     if not image_keys:
         logger.info("✅ No new images to process.")
         return
 
     # ✅ Filter out already processed keys using async database call
-    processed_keys = await async_get_processed_keys_from_db(image_keys)
+    processed_keys = await async_get_processed_keys_from_db(
+        image_keys, args.cutoff_date
+    )
     unprocessed_keys = [key for key in image_keys if key not in processed_keys]
 
     if not unprocessed_keys:
         logger.info("✅ All new images already processed. Updating checkpoint.")
         new_checkpoint = max(image_keys) if image_keys else last_processed_key
-        await async_write_checkpoint_safely(new_checkpoint)
+        await async_write_checkpoint_safely(new_checkpoint, args.cutoff_date)
         return
 
     logger.info(
@@ -94,12 +108,14 @@ async def main():
             # ✅ Process images asynchronously
             detection_results = await process_images_with_ocr(ocr_service, images)
             await asyncio.to_thread(save_results_to_csv, detection_results)
-            await asyncio.to_thread(save_results_to_postgres, detection_results)
+            await asyncio.to_thread(
+                save_results_to_postgres, detection_results, args.cutoff_date, args.env
+            )
 
             # ✅ Mark keys as processed & update checkpoint asynchronously
-            await async_mark_keys_as_processed(batch_keys)
+            await async_mark_keys_as_processed(batch_keys, args.cutoff_date)
             new_checkpoint = batch_keys[-1]
-            await async_write_checkpoint_safely(new_checkpoint)
+            await async_write_checkpoint_safely(new_checkpoint, args.cutoff_date)
 
             pbar.update(len(batch_keys))
             logger.info(

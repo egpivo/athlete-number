@@ -11,7 +11,6 @@ from src.config import DB_CREDENTIALS, DEST_BUCKET, DEST_FOLDER
 dynamodb = boto3.client("dynamodb")
 
 OCR_BATCH_SIZE = int(os.getenv("OCR_BATCH_SIZE", 10))
-CHECKPOINT_KEY = f"{DEST_FOLDER}/checkpoint.txt"
 CHECKPOINT_TABLE = "athlete_number_detection_image_processing_checkpoint"
 PROCESSED_KEY_TABLE = "athlete_number_detection_processed_image"
 
@@ -21,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_processed_keys_from_db(image_keys: list) -> set:
+def get_processed_keys_from_db(image_keys: list, cutoff_date: str) -> set:
     """Retrieve keys already processed from the database."""
     processed = set()
     if not image_keys:
@@ -34,7 +33,7 @@ def get_processed_keys_from_db(image_keys: list) -> set:
             for i in range(0, len(image_keys), chunk_size):
                 chunk = image_keys[i : i + chunk_size]
                 placeholders = ",".join(["%s"] * len(chunk))
-                query = f"SELECT image_key FROM {PROCESSED_KEY_TABLE} WHERE image_key IN ({placeholders})"
+                query = f"SELECT image_key FROM {PROCESSED_KEY_TABLE} WHERE image_key IN ({placeholders}) AND cutoff_date = {cutoff_date}"
                 cur.execute(query, chunk)
                 processed.update(row[0] for row in cur.fetchall())
         conn.close()
@@ -43,31 +42,36 @@ def get_processed_keys_from_db(image_keys: list) -> set:
     return processed
 
 
-def mark_keys_as_processed(image_keys: list) -> None:
-    """Mark keys as processed in the database."""
+def mark_keys_as_processed(image_keys: list, cutoff_date: str) -> None:
+    """Mark keys as processed in the database with a cutoff date."""
     if not image_keys:
         return
     try:
         conn = psycopg2.connect(**DB_CREDENTIALS)
         with conn.cursor() as cur:
             # Use executemany with ON CONFLICT to handle duplicates
-            args = [(key,) for key in image_keys]
+            args = [(key, cutoff_date) for key in image_keys]  # ✅ Include cutoff_date
             cur.executemany(
-                f"INSERT INTO {PROCESSED_KEY_TABLE} (image_key) VALUES (%s) ON CONFLICT (image_key) DO NOTHING",
+                f"""
+                INSERT INTO {PROCESSED_KEY_TABLE} (image_key, cutoff_date)
+                VALUES (%s, %s)
+                ON CONFLICT (image_key) DO UPDATE
+                SET cutoff_date = EXCLUDED.cutoff_date
+                """,
                 args,
             )
         conn.commit()
         conn.close()
     except Exception as e:
-        logger.error(f"Error marking keys as processed: {e}")
+        logger.error(f"❌ Error marking keys as processed: {e}")
 
 
-def get_last_checkpoint():
+def get_last_checkpoint(cutoff_date):
     """Fetches the last processed image key from DynamoDB."""
     try:
         response = dynamodb.get_item(
             TableName=CHECKPOINT_TABLE,
-            Key={"bucket": {"S": DEST_BUCKET}},
+            Key={"bucket": {"S": f"{DEST_BUCKET}/{DEST_FOLDER}/{cutoff_date}"}},
         )
         return response.get("Item", {}).get("last_processed_key", {}).get("S")
     except ClientError as e:
@@ -75,13 +79,13 @@ def get_last_checkpoint():
         return None
 
 
-async def async_write_checkpoint_safely(new_checkpoint):
+async def async_write_checkpoint_safely(new_checkpoint, cutoff_date):
     """Writes a new checkpoint safely using an atomic update."""
     try:
         response = await asyncio.to_thread(
             dynamodb.update_item,
             TableName=CHECKPOINT_TABLE,
-            Key={"bucket": {"S": DEST_BUCKET}},
+            Key={"bucket": {"S": f"{DEST_BUCKET}/{DEST_FOLDER}/{cutoff_date}"}},
             UpdateExpression="SET last_processed_key = :new_checkpoint, updated_at = :ts",
             ExpressionAttributeValues={
                 ":new_checkpoint": {"S": new_checkpoint},
@@ -94,13 +98,13 @@ async def async_write_checkpoint_safely(new_checkpoint):
         logger.error(f"❌ Error updating checkpoint: {e}")
 
 
-async def async_get_last_checkpoint():
-    return await asyncio.to_thread(get_last_checkpoint)
+async def async_get_last_checkpoint(cutoff_date):
+    return await asyncio.to_thread(get_last_checkpoint, cutoff_date)
 
 
-async def async_get_processed_keys_from_db(image_keys):
-    return await asyncio.to_thread(get_processed_keys_from_db, image_keys)
+async def async_get_processed_keys_from_db(image_keys, cutoff_date):
+    return await asyncio.to_thread(get_processed_keys_from_db, image_keys, cutoff_date)
 
 
-async def async_mark_keys_as_processed(image_keys):
-    await asyncio.to_thread(mark_keys_as_processed, image_keys)
+async def async_mark_keys_as_processed(image_keys, cutoff_date):
+    await asyncio.to_thread(mark_keys_as_processed, image_keys, cutoff_date)
