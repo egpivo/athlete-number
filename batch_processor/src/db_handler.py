@@ -71,7 +71,7 @@ def get_last_checkpoint(cutoff_date):
     try:
         response = dynamodb.get_item(
             TableName=CHECKPOINT_TABLE,
-            Key={"bucket": {"S": f"{DEST_BUCKET}/{DEST_FOLDER}/{cutoff_date}"}},
+            Key={"bucket_name": {"S": f"{DEST_BUCKET}/{DEST_FOLDER}/{cutoff_date}"}},
         )
         return response.get("Item", {}).get("last_processed_key", {}).get("S")
     except ClientError as e:
@@ -85,7 +85,7 @@ async def async_write_checkpoint_safely(new_checkpoint, cutoff_date):
         response = await asyncio.to_thread(
             dynamodb.update_item,
             TableName=CHECKPOINT_TABLE,
-            Key={"bucket": {"S": f"{DEST_BUCKET}/{DEST_FOLDER}/{cutoff_date}"}},
+            Key={"bucket_name": {"S": f"{DEST_BUCKET}/{DEST_FOLDER}/{cutoff_date}"}},
             UpdateExpression="SET last_processed_key = :new_checkpoint, updated_at = :ts",
             ExpressionAttributeValues={
                 ":new_checkpoint": {"S": new_checkpoint},
