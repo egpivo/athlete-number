@@ -33,8 +33,9 @@ def process_results(results):
     return rows
 
 
-def save_results_to_postgres(results):
-    """Insert detection results into PostgreSQL."""
+def save_results_to_postgres(results, cutoff_date, env):
+    """Insert detection results into PostgreSQL with cutoff_date and env."""
+
     structured_results = process_results(results)
 
     if not structured_results:
@@ -50,13 +51,19 @@ def save_results_to_postgres(results):
 
         # Insert query using batch insert
         insert_query = f"""
-        INSERT INTO {TABLE_NAME} (eid, cid, photonum, tag)
+        INSERT INTO {TABLE_NAME} (eid, cid, photonum, tag, cutoff_date, env)
         VALUES %s
-        ON CONFLICT DO NOTHING;
+        ON CONFLICT (eid, cid, photonum, tag, cutoff_date, env) DO UPDATE
+        SET modified_at = NOW();
         """
 
+        # Prepare data by adding cutoff_date and env to each record
+        records = [
+            (r[0], r[1], r[2], r[3], cutoff_date, env) for r in structured_results
+        ]
+
         # Batch insert data
-        execute_values(cur, insert_query, structured_results)
+        execute_values(cur, insert_query, records)
 
         # Commit changes
         conn.commit()
@@ -64,7 +71,7 @@ def save_results_to_postgres(results):
         conn.close()
 
         print(
-            f"✅ Successfully inserted {len(structured_results)} records into {TABLE_NAME}"
+            f"✅ Successfully inserted/updated {len(records)} records into {TABLE_NAME}"
         )
 
     except Exception as e:

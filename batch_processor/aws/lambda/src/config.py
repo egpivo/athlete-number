@@ -26,3 +26,10 @@ BATCH_SIZE = 50
 
 ENV_PREFIXES = os.getenv("PREFIXES", "").split(",")
 ENV_PREFIXES = [p.strip() for p in ENV_PREFIXES if p.strip()]
+
+
+DB_HOST = os.getenv("DB_HOST")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PW")
+DB_PORT = int(os.getenv("DB_PORT", 5432))

@@ -1,0 +1,106 @@
+import asyncio
+import logging
+import os
+import time
+
+import boto3
+import psycopg2
+from botocore.exceptions import ClientError
+from src.config import DB_CREDENTIALS, DEST_BUCKET, DEST_FOLDER
+
+dynamodb = boto3.client("dynamodb")
+
+OCR_BATCH_SIZE = int(os.getenv("OCR_BATCH_SIZE", 10))
+CHECKPOINT_KEY = f"{DEST_FOLDER}/checkpoint.txt"
+CHECKPOINT_TABLE = "athlete_number_detection_image_processing_checkpoint"
+PROCESSED_KEY_TABLE = "athlete_number_detection_processed_image"
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+
+def get_processed_keys_from_db(image_keys: list) -> set:
+    """Retrieve keys already processed from the database."""
+    processed = set()
+    if not image_keys:
+        return processed
+    try:
+        conn = psycopg2.connect(**DB_CREDENTIALS)
+        with conn.cursor() as cur:
+            # Process in chunks to avoid query size limits
+            chunk_size = 1000
+            for i in range(0, len(image_keys), chunk_size):
+                chunk = image_keys[i : i + chunk_size]
+                placeholders = ",".join(["%s"] * len(chunk))
+                query = f"SELECT image_key FROM {PROCESSED_KEY_TABLE} WHERE image_key IN ({placeholders})"
+                cur.execute(query, chunk)
+                processed.update(row[0] for row in cur.fetchall())
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error fetching processed keys: {e}")
+    return processed
+
+
+def mark_keys_as_processed(image_keys: list) -> None:
+    """Mark keys as processed in the database."""
+    if not image_keys:
+        return
+    try:
+        conn = psycopg2.connect(**DB_CREDENTIALS)
+        with conn.cursor() as cur:
+            # Use executemany with ON CONFLICT to handle duplicates
+            args = [(key,) for key in image_keys]
+            cur.executemany(
+                f"INSERT INTO {PROCESSED_KEY_TABLE} (image_key) VALUES (%s) ON CONFLICT (image_key) DO NOTHING",
+                args,
+            )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error marking keys as processed: {e}")
+
+
+def get_last_checkpoint():
+    """Fetches the last processed image key from DynamoDB."""
+    try:
+        response = dynamodb.get_item(
+            TableName=CHECKPOINT_TABLE,
+            Key={"bucket": {"S": DEST_BUCKET}},
+        )
+        return response.get("Item", {}).get("last_processed_key", {}).get("S")
+    except ClientError as e:
+        logger.error(f"❌ DynamoDB error: {e}")
+        return None
+
+
+async def async_write_checkpoint_safely(new_checkpoint):
+    """Writes a new checkpoint safely using an atomic update."""
+    try:
+        response = await asyncio.to_thread(
+            dynamodb.update_item,
+            TableName=CHECKPOINT_TABLE,
+            Key={"bucket": {"S": DEST_BUCKET}},
+            UpdateExpression="SET last_processed_key = :new_checkpoint, updated_at = :ts",
+            ExpressionAttributeValues={
+                ":new_checkpoint": {"S": new_checkpoint},
+                ":ts": {"N": str(int(time.time()))},
+            },
+            ConditionExpression="attribute_not_exists(last_processed_key) OR last_processed_key <= :new_checkpoint",
+        )
+        logger.info(f"✅ Checkpoint updated in DynamoDB: {new_checkpoint}")
+    except ClientError as e:
+        logger.error(f"❌ Error updating checkpoint: {e}")
+
+
+async def async_get_last_checkpoint():
+    return await asyncio.to_thread(get_last_checkpoint)
+
+
+async def async_get_processed_keys_from_db(image_keys):
+    return await asyncio.to_thread(get_processed_keys_from_db, image_keys)
+
+
+async def async_mark_keys_as_processed(image_keys):
+    await asyncio.to_thread(mark_keys_as_processed, image_keys)

@@ -1,10 +1,14 @@
 import asyncio
+import logging
 
+import aiobotocore
 import boto3
 import cv2
 import numpy as np
 from PIL import Image
 from src.config import AWS_ACCESS_KEY, AWS_SECRET_KEY, DEST_BUCKET
+
+logger = logging.getLogger(__name__)
 
 # Initialize S3 client
 s3_client = boto3.client(
@@ -54,3 +58,38 @@ async def batch_download_images(image_keys: list):
     tasks = [download_image(DEST_BUCKET, key) for key in image_keys]
     results = await asyncio.gather(*tasks)
     return [(img, key) for img, key in results if img is not None]
+
+
+async def read_checkpoint(bucket: str, key: str) -> str:
+    """Asynchronously reads the last processed image key from S3."""
+    session = aiobotocore.get_session()
+    async with session.create_client("s3") as s3_client:
+        try:
+            response = await s3_client.get_object(
+                Bucket=bucket.replace("s3://", ""), Key=key
+            )
+            checkpoint = await response["Body"].read()
+            checkpoint_value = checkpoint.decode("utf-8").strip()
+            logger.info(f"📌 Last checkpoint read: {checkpoint_value}")
+            return checkpoint_value
+        except s3_client.exceptions.NoSuchKey:
+            logger.info("🛑 No checkpoint found. Starting from the beginning.")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Error reading checkpoint: {e}")
+            return None
+
+
+async def write_checkpoint(bucket: str, key: str, checkpoint_value: str) -> None:
+    """Asynchronously writes the last processed image key to S3."""
+    session = aiobotocore.get_session()
+    async with session.create_client("s3") as s3_client:
+        try:
+            await s3_client.put_object(
+                Bucket=bucket.replace("s3://", ""),
+                Key=key,
+                Body=checkpoint_value.encode("utf-8"),
+            )
+            logger.info(f"✅ Checkpoint updated: {checkpoint_value}")
+        except Exception as e:
+            logger.error(f"❌ Error writing checkpoint: {e}")

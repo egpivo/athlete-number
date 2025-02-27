@@ -1,12 +1,10 @@
 {
-    "TableName": "athlete_number_detection_image_tracker",
+    "TableName": "athlete_number_detection_image_processing_checkpoint",
     "AttributeDefinitions": [
-        { "AttributeName": "customer_id", "AttributeType": "S" },
-        { "AttributeName": "image_id", "AttributeType": "S" }
+        { "AttributeName": "bucket_name", "AttributeType": "S" }
     ],
     "KeySchema": [
-        { "AttributeName": "customer_id", "KeyType": "HASH" },
-        { "AttributeName": "image_id", "KeyType": "RANGE" }
+        { "AttributeName": "bucket_name", "KeyType": "HASH" }
     ],
     "BillingMode": "PAY_PER_REQUEST"
 }

@@ -2,7 +2,7 @@
 
 # Set AWS region
 AWS_REGION="us-east-1"
-DDL_PATH="./aws/dynamodb/ddl"  # Ensure we point to the correct directory
+DDL_PATH=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ddl  # Ensure we point to the correct directory
 
 # Function to create a table from a DDL file
 create_table() {

@@ -7,42 +7,42 @@ logger = logging.getLogger()
 s3_client = boto3.client("s3")
 
 
-def list_sorted_s3_objects(bucket_name, prefix, offset, batch_size):
-    """List S3 objects sorted by LastModified timestamp using offset and batch processing"""
-    all_files = []
-    seen_keys = set()  # Track unique file keys to prevent duplicates
-
+def list_s3_images_incremental(
+    bucket, prefix, last_processed_key=None, batch_size=1000
+):
+    """List S3 objects sorted by LastModified while supporting checkpoints."""
     paginator = s3_client.get_paginator("list_objects_v2")
-    page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
 
-    for page in page_iterator:
-        if "Contents" not in page:
-            print(f"❌ No files found in prefix: {prefix}")
-            continue
+    # Set up pagination configuration
+    pagination_config = {"Bucket": bucket, "Prefix": prefix, "MaxKeys": batch_size}
 
-        for obj in page["Contents"]:
-            if obj["Key"] not in seen_keys:  # Avoid duplicates
-                seen_keys.add(obj["Key"])
-                all_files.append(
-                    {"Key": obj["Key"], "LastModified": obj["LastModified"]}
-                )
+    if last_processed_key:
+        pagination_config["StartAfter"] = last_processed_key
 
-    print(f"🔍 Found {len(all_files)} unique files before sorting for prefix '{prefix}'")
+    try:
+        page_iterator = paginator.paginate(**pagination_config)
 
-    if not all_files:
-        return []
+        for page in page_iterator:
+            if "Contents" not in page:
+                return [], None  # No more files
 
-    # Sort by LastModified (most recent first)
-    all_files.sort(key=lambda x: x["LastModified"], reverse=True)
+            batch_files = [
+                {"Key": obj["Key"], "LastModified": obj["LastModified"]}
+                for obj in page["Contents"]
+                if obj["Key"]
+                .lower()
+                .endswith((".jpg", ".jpeg", ".png"))  # Filter images only
+            ]
+            batch_files.sort(key=lambda x: x["LastModified"], reverse=True)
 
-    # Apply offset & batch selection
-    start_index = offset * batch_size
-    end_index = start_index + batch_size
+            # Get next start_after key
+            next_start_after = batch_files[-1]["Key"] if batch_files else None
 
-    selected_files = all_files[start_index:end_index]
-    print(f"✅ Returning {len(selected_files)} files from {start_index} to {end_index}")
+            return batch_files, next_start_after
 
-    return selected_files
+    except Exception as e:
+        print(f"❌ Error listing S3 objects: {e}")
+        return [], None
 
 
 def copy_s3_object(source_key, dest_bucket, dest_key):
