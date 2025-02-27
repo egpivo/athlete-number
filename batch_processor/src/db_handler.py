@@ -47,6 +47,7 @@ def mark_keys_as_processed(image_keys: list, cutoff_date: str) -> None:
     if not image_keys:
         return
     try:
+        image_keys = set(image_keys)
         conn = psycopg2.connect(**DB_CREDENTIALS)
         with conn.cursor() as cur:
             # Use executemany with ON CONFLICT to handle duplicates
