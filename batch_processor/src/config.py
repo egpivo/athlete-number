@@ -10,6 +10,7 @@ AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
 AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
 DEST_BUCKET = os.getenv("DEST_BUCKET", "s3://athlete-number-detection")
 DEST_FOLDER = os.getenv("DEST_FOLDER", "images")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 # Processing settings
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", 10))

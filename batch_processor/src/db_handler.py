@@ -6,9 +6,9 @@ import time
 import boto3
 import psycopg2
 from botocore.exceptions import ClientError
-from src.config import DB_CREDENTIALS, DEST_BUCKET, DEST_FOLDER
+from src.config import AWS_REGION, DB_CREDENTIALS, DEST_BUCKET, DEST_FOLDER
 
-dynamodb = boto3.client("dynamodb")
+dynamodb = boto3.client("dynamodb", region_name=AWS_REGION)
 
 OCR_BATCH_SIZE = int(os.getenv("OCR_BATCH_SIZE", 10))
 CHECKPOINT_TABLE = "athlete_number_detection_image_processing_checkpoint"
