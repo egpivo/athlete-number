@@ -59,12 +59,11 @@ async def main():
 
     # ✅ List images from S3 after the last checkpoint
     image_keys, next_start_after = await asyncio.to_thread(
-        list_s3_images_incremental(
-            bucket=DEST_BUCKET,
-            prefix=f"{DEST_FOLDER}/{args.cutoff_date}",
-            batch_size=args.max_images,
-            last_processed_key=last_processed_key,
-        )
+        list_s3_images_incremental,
+        DEST_BUCKET,
+        f"{DEST_FOLDER}/{args.cutoff_date}",
+        last_processed_key,
+        args.max_images,
     )
 
     if not image_keys:
