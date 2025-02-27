@@ -16,9 +16,12 @@ load_dotenv()
 # AWS SES Configuration
 ses = boto3.client("ses", region_name="us-east-1")
 SENDER_EMAIL = "joseph.wang@instai.co"
-RECIPIENT_EMAILS = ["egpivo@gmail.com", "honami@photocreate.com.tw"]
-PRODUCTION_SUBJECT = "[InstAI] Athlete Number Detection Report"
-TEST_SUBJECT = "[InstAI][Test] Athlete Number Detection Report"
+RECIPIENT_EMAILS = [
+    "joseph.wang@instai.co",
+    # "honami@photocreate.com.tw"
+]
+TEST_SUBJECT = "[InstAI] Athlete Number Detection Report - TEST"
+PRODUCTION_SUBJECT = "[InstAI] Athlete Number Detection Report - PROCESSED IMAGES"
 
 # PostgreSQL Connection Details (Loaded from .env)
 DB_HOST = os.getenv("DB_HOST")
@@ -75,7 +78,19 @@ def generate_csv(data):
 
 
 def send_email(csv_file, env):
-    """Send email with CSV attachment via AWS SES to multiple recipients"""
+    """Send email with CSV attachment via AWS SES to multiple recipients."""
+    # Get the total number of processed images
+    total_processed = get_processed_image_count(csv_file)
+
+    # Prepare email content
+    email_body = (
+        f"Dear Customer,\n\n"
+        f"The athlete number detection process has completed.\n"
+        f"Total images processed: **{total_processed}**\n\n"
+        f"Please find the attached report.\n\n"
+        f"Best regards,\n InstAI"
+    )
+
     with open(csv_file, "rb") as file:
         csv_data = file.read()
 
@@ -84,9 +99,7 @@ def send_email(csv_file, env):
     msg["From"] = SENDER_EMAIL
     msg["To"] = ", ".join(RECIPIENT_EMAILS)  # Multiple recipients
     msg["Subject"] = TEST_SUBJECT if env == "test" else PRODUCTION_SUBJECT
-    msg.attach(
-        MIMEText("Please find the attached athlete number detection report.", "plain")
-    )
+    msg.attach(MIMEText(email_body, "plain"))
 
     # Attach CSV file
     part = MIMEBase("application", "octet-stream")

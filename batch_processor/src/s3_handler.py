@@ -23,8 +23,6 @@ def list_s3_images_incremental(
 ):
     """List S3 objects sorted by LastModified while supporting checkpoints."""
     paginator = s3_client.get_paginator("list_objects_v2")
-
-    # Set up pagination configuration
     pagination_config = {"Bucket": bucket, "Prefix": prefix, "MaxKeys": batch_size}
 
     if last_processed_key:
@@ -32,28 +30,25 @@ def list_s3_images_incremental(
 
     try:
         page_iterator = paginator.paginate(**pagination_config)
-
         for page in page_iterator:
             if "Contents" not in page:
                 return [], None  # No more files
 
-            # ✅ Extract keys and LastModified for sorting
+            # Extract file keys and timestamps
             batch_files = [
-                (obj["Key"], obj["LastModified"])
+                obj["Key"]
                 for obj in page["Contents"]
-                if obj["Key"]
-                .lower()
-                .endswith((".jpg", ".jpeg", ".png"))  # Filter images only
+                if obj["Key"].lower().endswith((".jpg", ".jpeg", ".png"))
             ]
-            batch_files.sort(key=lambda x: x[1], reverse=True)
 
-            image_keys = [item[0] for item in batch_files]
-            next_start_after = image_keys[-1] if image_keys else None
+            if not batch_files:
+                return [], None
 
-            return image_keys, next_start_after
+            next_start_after = batch_files[-1]
+            yield batch_files, next_start_after
 
     except Exception as e:
-        logger.error(f"❌ Error listing S3 objects: {e}")
+        print(f"❌ Error listing S3 objects: {e}")
         return [], None
 
 
