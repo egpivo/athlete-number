@@ -8,7 +8,7 @@ S3_BUCKET="athlete-number-detection"
 S3_KEY="lambda_deployments/lambda_function.zip"
 TMP_DIR="/tmp/lambda_package"
 ZIP_FILE="lambda_function.zip"
-
+pushd ${LAMBDA_SRC_DIR}
 # Ensure AWS CLI does not use a pager
 export AWS_PAGER=""
 
@@ -90,3 +90,4 @@ fi
 rm "$ZIP_FILE"
 rm -rf "$TMP_DIR"
 echo "🗑️ Removed temporary files."
+popd

@@ -20,8 +20,8 @@ RECIPIENT_EMAILS = [
     "joseph.wang@instai.co",
     # "honami@photocreate.com.tw"
 ]
-TEST_SUBJECT = "[InstAI] Athlete Number Detection Report - TEST"
-PRODUCTION_SUBJECT = "[InstAI] Athlete Number Detection Report - PROCESSED IMAGES"
+TEST_SUBJECT = "[InstAI] Bib Number Detection Report - TEST"
+PRODUCTION_SUBJECT = "[InstAI] Bib Number Detection Report - PROCESSED IMAGES"
 
 # PostgreSQL Connection Details (Loaded from .env)
 DB_HOST = os.getenv("DB_HOST")
@@ -77,18 +77,46 @@ def generate_csv(data):
     return csv_file
 
 
-def send_email(csv_file, env):
+def get_processed_image_count(cutoff_date):
+    """Retrieve the total count of processed images from PostgreSQL."""
+    connection = None
+    try:
+        connection = pg8000.connect(
+            host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASS
+        )
+        cursor = connection.cursor()
+
+        # Query to count processed images based on the cutoff_date
+        query = """
+        SELECT COUNT(*)
+        FROM athlete_number_detection_processed_image
+        WHERE cutoff_date = %s
+        """
+        cursor.execute(query, (cutoff_date,))
+        count = cursor.fetchone()[0]  # Extract the count value
+
+        print(f"✅ Total processed images for {cutoff_date}: {count}")
+        return count
+    except Exception as e:
+        print(f"❌ Error counting processed images: {e}")
+        return 0
+    finally:
+        if connection:
+            connection.close()
+
+
+def send_email(csv_file, env, cutoff_date):
     """Send email with CSV attachment via AWS SES to multiple recipients."""
     # Get the total number of processed images
-    total_processed = get_processed_image_count(csv_file)
+    total_processed = get_processed_image_count(cutoff_date)
 
     # Prepare email content
     email_body = (
         f"Dear Customer,\n\n"
         f"The athlete number detection process has completed.\n"
-        f"Total images processed: **{total_processed}**\n\n"
+        f"Total images processed: {total_processed}\n\n"
         f"Please find the attached report.\n\n"
-        f"Best regards,\n InstAI"
+        f"Best Regards,\nInstAI"
     )
 
     with open(csv_file, "rb") as file:
@@ -133,6 +161,6 @@ def lambda_handler(event, context):
         return {"statusCode": 200, "body": "No data to send"}
 
     csv_file = generate_csv(data)
-    send_email(csv_file, env)
+    send_email(csv_file, env, cutoff_date)
 
     return {"statusCode": 200, "body": "CSV email sent successfully"}
