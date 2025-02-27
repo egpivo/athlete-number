@@ -37,22 +37,23 @@ def list_s3_images_incremental(
             if "Contents" not in page:
                 return [], None  # No more files
 
+            # ✅ Extract keys and LastModified for sorting
             batch_files = [
-                {"Key": obj["Key"], "LastModified": obj["LastModified"]}
+                (obj["Key"], obj["LastModified"])
                 for obj in page["Contents"]
                 if obj["Key"]
                 .lower()
                 .endswith((".jpg", ".jpeg", ".png"))  # Filter images only
             ]
-            batch_files.sort(key=lambda x: x["LastModified"], reverse=True)
+            batch_files.sort(key=lambda x: x[1], reverse=True)
 
-            # Get next start_after key
-            next_start_after = batch_files[-1]["Key"] if batch_files else None
+            image_keys = [item[0] for item in batch_files]
+            next_start_after = image_keys[-1] if image_keys else None
 
-            return batch_files, next_start_after
+            return image_keys, next_start_after
 
     except Exception as e:
-        print(f"❌ Error listing S3 objects: {e}")
+        logger.error(f"❌ Error listing S3 objects: {e}")
         return [], None
 
 
@@ -82,12 +83,12 @@ async def download_image(bucket: str, key: str):
         image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
 
         if image is None:
-            print(f"Failed to decode image {key}. Skipping.")
+            logger.warning(f"Failed to decode image {key}. Skipping.")
             return None, key
 
         return Image.fromarray(image), key
     except Exception as e:
-        print(f"Error downloading {key}: {e}")
+        logger.error(f"Error downloading {key}: {e}")
         return None, key
 
 

@@ -75,7 +75,11 @@ async def main():
         image_keys, args.cutoff_date
     )
     processed_keys = set(str(key) for key in processed_keys)
-    unprocessed_keys = [key for key in image_keys if key not in processed_keys]
+    unprocessed_keys = (
+        [key for key in image_keys if key not in processed_keys]
+        if processed_keys
+        else image_keys
+    )
 
     if not unprocessed_keys:
         logger.info("✅ All new images already processed. Updating checkpoint.")
