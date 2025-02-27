@@ -52,14 +52,12 @@ def mark_keys_as_processed(image_keys: list, cutoff_date: str) -> None:
             # Use executemany with ON CONFLICT to handle duplicates
             args = [(key, cutoff_date) for key in image_keys]  # ✅ Include cutoff_date
             cur.executemany(
-                f"""
-                INSERT INTO {PROCESSED_KEY_TABLE} (image_key, cutoff_date)
-                VALUES (%s, %s)
-                ON CONFLICT (image_key) DO UPDATE
-                SET cutoff_date = EXCLUDED.cutoff_date
-                """,
+                f"""INSERT INTO {PROCESSED_KEY_TABLE} (image_key, cutoff_date)
+                   VALUES (%s, %s)
+                   ON CONFLICT (image_key, cutoff_date) DO NOTHING""",
                 args,
             )
+
         conn.commit()
         conn.close()
     except Exception as e:
@@ -80,7 +78,6 @@ def get_last_checkpoint(cutoff_date):
 
 
 async def async_write_checkpoint_safely(new_checkpoint, cutoff_date):
-    """Writes a new checkpoint safely using an atomic update."""
     try:
         response = await asyncio.to_thread(
             dynamodb.update_item,
@@ -91,11 +88,11 @@ async def async_write_checkpoint_safely(new_checkpoint, cutoff_date):
                 ":new_checkpoint": {"S": new_checkpoint},
                 ":ts": {"N": str(int(time.time()))},
             },
-            ConditionExpression="attribute_not_exists(last_processed_key) OR last_processed_key <= :new_checkpoint",
+            ConditionExpression="attribute_exists(bucket_name) OR attribute_not_exists(last_processed_key)",
         )
-        logger.info(f"✅ Checkpoint updated in DynamoDB: {new_checkpoint}")
+        logger.info(f"✅ Checkpoint updated: {new_checkpoint}")
     except ClientError as e:
-        logger.error(f"❌ Error updating checkpoint: {e}")
+        logger.error(f"❌ Checkpoint update error: {e}")
 
 
 async def async_get_last_checkpoint(cutoff_date):
