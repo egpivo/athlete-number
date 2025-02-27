@@ -35,7 +35,9 @@ def get_processed_keys_from_db(image_keys: list, cutoff_date: str) -> set:
                 placeholders = ",".join(["%s"] * len(chunk))
                 query = f"SELECT image_key FROM {PROCESSED_KEY_TABLE} WHERE image_key IN ({placeholders}) AND cutoff_date = {cutoff_date}"
                 cur.execute(query, chunk)
-                processed.update(row[0] for row in cur.fetchall())
+                processed.update(
+                    row[0] for row in cur.fetchall() if isinstance(row, tuple)
+                )
         conn.close()
     except Exception as e:
         logger.error(f"Error fetching processed keys: {e}")

@@ -74,6 +74,7 @@ async def main():
     processed_keys = await async_get_processed_keys_from_db(
         image_keys, args.cutoff_date
     )
+    processed_keys = set(processed_keys)
     unprocessed_keys = [key for key in image_keys if key not in processed_keys]
 
     if not unprocessed_keys:
