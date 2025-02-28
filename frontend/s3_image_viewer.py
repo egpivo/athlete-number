@@ -31,9 +31,7 @@ s3 = boto3.client(
 
 
 def fetch_random_sample(cutoff_date):
-    """
-    Fetch a random EID, CID, and Photonum from PostgreSQL.
-    """
+    """Fetch a random EID, CID, and Photonum from PostgreSQL."""
     try:
         conn = pg8000.connect(
             host=DB_HOST,
@@ -64,9 +62,7 @@ def fetch_random_sample(cutoff_date):
 
 
 def fetch_results_from_postgres(cutoff_date, eid, cid, photonum):
-    """
-    Fetch detection results (EID, CID, Photonum, grouped Tags) from PostgreSQL.
-    """
+    """Fetch detection results (EID, CID, Photonum, grouped Tags) from PostgreSQL."""
     try:
         conn = pg8000.connect(
             host=DB_HOST,
@@ -97,9 +93,7 @@ def fetch_results_from_postgres(cutoff_date, eid, cid, photonum):
 
 
 def fetch_image_keys_from_postgres(cutoff_date, eid, cid, photonum):
-    """
-    Fetch all image keys from PostgreSQL for a given EID, CID, and Photonum.
-    """
+    """Fetch all image keys from PostgreSQL for a given EID, CID, and Photonum."""
     try:
         conn = pg8000.connect(
             host=DB_HOST,
@@ -131,9 +125,7 @@ def fetch_image_keys_from_postgres(cutoff_date, eid, cid, photonum):
 
 
 def load_image_from_s3(image_key):
-    """
-    Load an image from S3 given its key.
-    """
+    """Load an image from S3 given its key."""
     try:
         response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=image_key)
         return Image.open(BytesIO(response["Body"].read()))
@@ -158,22 +150,27 @@ eid = st.sidebar.text_input("🏅 Enter EID (Required):", "")
 cid = st.sidebar.text_input("🎽 Enter CID (Required):", "")
 photonum = st.sidebar.text_input("📸 Enter Photonum (Required):", "")
 
+# Buttons for triggering search
+trigger_search = False
+
 # Sample Button - Picks a random EID, CID, Photonum & Auto-Runs Query
 if st.sidebar.button("🎲 Pick Random Sample"):
     sample = fetch_random_sample(cutoff_date)
     if sample:
         eid, cid, photonum = sample
-        # st.sidebar.success(f"✅ Picked Sample: EID={eid}, CID={cid}, Photonum={photonum}")
-
-        # Auto-fetch and display results
-        query_button = True
+        st.sidebar.success(
+            f"✅ Picked Sample: EID={eid}, CID={cid}, Photonum={photonum}"
+        )
+        trigger_search = True  # Auto-run search when picking random
     else:
         st.sidebar.warning("⚠️ No sample found.")
-        query_button = False
-else:
-    query_button = st.sidebar.button("🔍 Query Results")
 
-if query_button:
+# Manual Query Button
+if st.sidebar.button("🔍 Query Results"):
+    trigger_search = True  # Run search when button is clicked
+
+# Only run the query if triggered by button clicks
+if trigger_search:
     # Fetch detection results (eid, cid, photonum, grouped tags)
     results_df = fetch_results_from_postgres(cutoff_date, eid, cid, photonum)
 
@@ -222,4 +219,4 @@ if query_button:
         st.warning("⚠️ No results found for the given criteria.")
 
 else:
-    st.info("ℹ️ Enter **EID, CID, and Photonum** in the sidebar to query results.")
+    st.info("ℹ️ Enter **EID, CID, and Photonum**, then click **Query Results**.")
