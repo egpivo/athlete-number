@@ -5,7 +5,7 @@ import boto3
 import pandas as pd
 import pg8000
 import streamlit as st
-from dotenv import load_dotenv  # ✅ Load .env file
+from dotenv import load_dotenv
 from PIL import Image
 
 # ✅ Load environment variables
@@ -135,11 +135,11 @@ def load_image_from_s3(image_key):
 
 
 # Streamlit UI
-st.title("📸 Athlete Number Detection Viewer")
+st.title("📸 Bib Number Detection Viewer")
 
 st.markdown(
     """
-    Use this tool to **search for athlete detection results** stored in **PostgreSQL** and **preview images** from **AWS S3**.
+    Use this tool to **verify  athlete detection results** stored in **PostgreSQL** and **preview images** from **AWS S3**.
     """
 )
 
@@ -158,19 +158,33 @@ if st.sidebar.button("🎲 Pick Random Sample"):
     sample = fetch_random_sample(cutoff_date)
     if sample:
         eid, cid, photonum = sample
+        st.session_state["eid"] = eid
+        st.session_state["cid"] = cid
+        st.session_state["photonum"] = photonum
         st.sidebar.success(
             f"✅ Picked Sample: EID={eid}, CID={cid}, Photonum={photonum}"
         )
-        trigger_search = True  # Auto-run search when picking random
+        st.rerun()  # 🔄 Reload Streamlit
     else:
         st.sidebar.warning("⚠️ No sample found.")
 
 # Manual Query Button
 if st.sidebar.button("🔍 Query Results"):
-    trigger_search = True  # Run search when button is clicked
+    st.session_state["eid"] = eid
+    st.session_state["cid"] = cid
+    st.session_state["photonum"] = photonum
+    st.rerun()  # 🔄 Reload Streamlit
 
 # Only run the query if triggered by button clicks
-if trigger_search:
+if (
+    "eid" in st.session_state
+    and "cid" in st.session_state
+    and "photonum" in st.session_state
+):
+    eid = st.session_state["eid"]
+    cid = st.session_state["cid"]
+    photonum = st.session_state["photonum"]
+
     # Fetch detection results (eid, cid, photonum, grouped tags)
     results_df = fetch_results_from_postgres(cutoff_date, eid, cid, photonum)
 
@@ -217,6 +231,3 @@ if trigger_search:
             )
     else:
         st.warning("⚠️ No results found for the given criteria.")
-
-else:
-    st.info("ℹ️ Enter **EID, CID, and Photonum**, then click **Query Results**.")
