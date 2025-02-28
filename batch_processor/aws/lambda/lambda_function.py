@@ -18,7 +18,10 @@ ses = boto3.client("ses", region_name="us-east-1")
 SENDER_EMAIL = "joseph.wang@instai.co"
 RECIPIENT_EMAILS = [
     "joseph.wang@instai.co",
-    # "honami@photocreate.com.tw"
+    "honami@photocreate.com.tw",
+    "keyu.pi@instai.co",
+    "justin.chang@instai.co",
+    "yingling.yang@instai.co",
 ]
 TEST_SUBJECT = "[InstAI] Bib Number Detection Report - TEST"
 PRODUCTION_SUBJECT = "[InstAI] Bib Number Detection Report - PROCESSED IMAGES"
@@ -113,10 +116,13 @@ def send_email(csv_file, env, cutoff_date):
     # Prepare email content
     email_body = (
         f"Dear Customer,\n\n"
-        f"The athlete number detection process has completed.\n"
-        f"Total images processed: {total_processed}\n\n"
-        f"Please find the attached report.\n\n"
-        f"Best Regards,\nInstAI"
+        f"The athlete number detection process on {cutoff_date} is currently in progress.\n\n"
+        f"📸 Images processed so far: {total_processed}\n"
+        f"⏳ Processing status: 🔄 In Progress\n\n"
+        f"We are continuously updating the results and will notify you once the process is fully completed.\n\n"
+        f"Please let us know if you have any questions or need further assistance.\n\n"
+        f"Best Regards,\n"
+        f"InstAI"
     )
 
     with open(csv_file, "rb") as file:
@@ -150,7 +156,7 @@ def send_email(csv_file, env, cutoff_date):
 
 def lambda_handler(event, context):
     """Main Lambda function"""
-    cutoff_date = event.get("cutoff_date", "2025-02-25")  # Default if not provided
+    cutoff_date = event.get("cutoff_date", "2025-02-28")  # Default if not provided
     env = event.get("env", "test")  # Default to 'test' if not provided
 
     print(f"🔍 Fetching data for cutoff_date={cutoff_date}, env={env}")
