@@ -57,6 +57,7 @@ async def main():
     logger.info(f"🔄 Resuming from checkpoint: {last_processed_key or 'Beginning'}")
 
     ocr_service = await initialize_ocr()
+    total_processed = 0
 
     async for image_keys, next_start_after in list_s3_images_incremental(
         DEST_BUCKET, f"{DEST_FOLDER}/{args.cutoff_date}", last_processed_key, 1000
@@ -75,6 +76,13 @@ async def main():
             if processed_keys
             else image_keys
         )
+
+        if args.max_images:
+            remaining = args.max_images - total_processed
+            if remaining <= 0:
+                logger.info("✅ Reached max images limit. Stopping.")
+                break
+            unprocessed_keys = unprocessed_keys[:remaining]
 
         if not unprocessed_keys:
             logger.info(
@@ -116,12 +124,21 @@ async def main():
                 # ✅ Mark keys as processed & update checkpoint asynchronously
                 await async_mark_keys_as_processed(batch_keys, args.cutoff_date)
                 await async_write_checkpoint_safely(batch_keys[-1], args.cutoff_date)
-
+                total_processed += len(batch_keys)
                 pbar.update(len(batch_keys))
                 logger.info(
                     f"✅ Processed {pbar.n}/{len(unprocessed_keys)} images. Checkpoint: {batch_keys[-1]}"
                 )
-
+            if args.max_images is not None and total_processed >= args.max_images:
+                logger.info(
+                    f"🚫 Stopping early: Processed {total_processed} images (max {args.max_images})"
+                )
+                break
+        if args.max_images is not None and total_processed >= args.max_images:
+            logger.info(
+                f"🚫 Stopping early: Processed {total_processed} images (max {args.max_images})"
+            )
+            break
     logger.info("🎉✅ Incremental processing complete!")
 
 

@@ -1,4 +1,5 @@
 import os
+import re
 
 import pandas as pd
 import psycopg2
@@ -27,9 +28,8 @@ def process_results(results):
         eid, cid, photonum = result.filename.split("/")[-1].split("_")[:3]
         if result.extracted_number:
             for tag in result.extracted_number:
-                rows.append((eid, cid, photonum, tag))
-        else:
-            rows.append((eid, cid, photonum, ""))
+                if re.fullmatch(r"\d{5}", tag):
+                    rows.append((eid, cid, photonum, tag))
     return rows
 
 
