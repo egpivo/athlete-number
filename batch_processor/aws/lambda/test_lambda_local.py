@@ -1,35 +1,22 @@
 import json
-import logging
-import os
 
-import boto3
-from dotenv import load_dotenv
 from lambda_function import lambda_handler  # Import your Lambda function
 
-# Load environment variables
-load_dotenv()
+# Define a test event (mock event as JSON)
+test_event = {"cutoff_date": "2025-02-28", "env": "test"}
 
-# Configure logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+# Mock AWS Lambda context (you can leave it empty)
+class LambdaContext:
+    def __init__(self):
+        self.function_name = "test_lambda"
+        self.memory_limit_in_mb = 128
+        self.invoked_function_arn = (
+            "arn:aws:lambda:us-east-1:123456789012:function:test_lambda"
+        )
+        self.aws_request_id = "test-aws-request-id"
 
-# Mock event for testing
-test_event = {
-    "dry_run": False,  # Set to False to actually process images
-    "max_files": 100,  # Test with a small batch first
-    "customer_id": "allsports",
-    "prefixes": ["778592_3175", "778592_5881"],  # Adjust prefixes
-}
-
-# AWS Configuration (ensure valid credentials)
-boto3.setup_default_session(
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    region_name=os.getenv("AWS_REGION", "us-east-1"),
-)
 
 # Run the function locally
 if __name__ == "__main__":
-    print("🚀 Running Lambda locally...")
-    response = lambda_handler(test_event, None)
-    print("✅ Lambda Response:", json.dumps(response, indent=4))
+    response = lambda_handler(test_event, LambdaContext())
+    print(json.dumps(response, indent=4))
