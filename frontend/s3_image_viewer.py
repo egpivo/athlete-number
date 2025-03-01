@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from io import BytesIO
 
 import boto3
@@ -147,7 +148,8 @@ st.markdown(
 
 # Sidebar Inputs (Mandatory Fields)
 st.sidebar.header("🔍 Search Filters")
-cutoff_date = st.sidebar.text_input("📅 Enter cutoff date (YYYY-MM-DD):", "2025-02-28")
+today_date = datetime.today().strftime("%Y-%m-%d")
+cutoff_date = st.sidebar.text_input("📅 Enter cutoff date (YYYY-MM-DD):", today_date)
 eid = st.sidebar.text_input("🏅 Enter EID (Required):", "")
 cid = st.sidebar.text_input("🎽 Enter CID (Required):", "")
 photonum = st.sidebar.text_input("📸 Enter Photonum (Required):", "")
