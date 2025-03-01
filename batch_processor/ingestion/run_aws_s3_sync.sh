@@ -1,10 +1,6 @@
 #!/bin/bash
 #
-#
-# Examples
-#   - Provide Event IDs Only: ./sync_script.sh -d 2025-02-26 -e 778592_3169 778592_3456
-#   - Customize Date: ./sync_script.sh -e 778592_3169 778592_3456 778592_3952
-#
+# Updated Sync Script with Real-time PostgreSQL Integration
 #
 
 # Default parameters
@@ -15,15 +11,11 @@ REGION="us-east-1"
 MAX_PARALLEL_JOBS=6
 EVENT_IDS=()
 
+source $(poetry env info --path)/bin/activate
+
 # Help function
 usage() {
     echo "Usage: $0 [-d DATE] [-r REGION] [-j MAX_PARALLEL_JOBS] -e EVENT_ID1 EVENT_ID2 ..."
-    echo ""
-    echo "  -d DATE                 Specify a custom date (default: today's date)"
-    echo "  -r REGION               Specify AWS region (default: us-east-1)"
-    echo "  -j MAX_PARALLEL_JOBS    Specify the number of parallel jobs (default: 4)"
-    echo "  -e EVENT_IDS            Space-separated list of event IDs (required)"
-    echo "  -h                      Display this help message"
     exit 1
 }
 
@@ -33,36 +25,38 @@ while getopts "d:r:j:e:h" opt; do
         d) DATE=$OPTARG ;;
         r) REGION=$OPTARG ;;
         j) MAX_PARALLEL_JOBS=$OPTARG ;;
-        e) shift $((OPTIND - 1)); EVENT_IDS=("$@"); break ;;  # Capture remaining arguments as event IDs
+        e) shift $((OPTIND - 1)); EVENT_IDS=("$@"); break ;;
         h) usage ;;
         *) usage ;;
     esac
 done
 
-# Validate that at least one event ID was provided
+# Validate event IDs
 if [ ${#EVENT_IDS[@]} -eq 0 ]; then
-    echo "Error: You must provide at least one event ID with the -e flag."
+    echo "Error: Provide at least one event ID with -e."
     usage
 fi
 
-# Create logs directory if not exists
+# Create logs directory
 mkdir -p logs
+
+# Start Python script to process logs in real-time
+python3 process_s3_log_live.py logs &
 
 # Function to sync S3
 sync_s3() {
     local EID_CID=$1
     echo "Syncing ${EID_CID}..."
     aws s3 sync "${SOURCE_BUCKET}/${EID_CID}/" "${DEST_BUCKET}/${DATE}/${EID_CID}" \
-        --delete --region "${REGION}" >> "logs/${EID_CID}.log" 2>&1
+        --delete --region "${REGION}" | tee -a "logs/${EID_CID}.log" &
 }
 
-# Run jobs in parallel with control
+# Run jobs in parallel
 SEMAPHORE="sync_semaphore"
 mkfifo ${SEMAPHORE}
 exec 3<>${SEMAPHORE}
 rm ${SEMAPHORE}
 
-# Initialize the semaphore with empty slots
 for ((i = 0; i < MAX_PARALLEL_JOBS; i++)); do echo; done >&3
 
 for EID_CID in "${EVENT_IDS[@]}"; do

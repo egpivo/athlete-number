@@ -32,7 +32,7 @@ ses_client = boto3.client("ses", region_name="us-east-1")
 ec2_client = boto3.client("ec2", region_name="us-east-1")
 events_client = boto3.client("events", region_name="us-east-1")
 SECRET_NAME = "GoogleSheetsServiceAccountBibNumber"
-
+DIGIT_LENGTH = 5
 # ✅ PostgreSQL Configuration
 DB_CONFIG = {
     "host": os.getenv("DB_HOST"),
@@ -75,7 +75,7 @@ def get_google_sheets_credentials():
 
 # ✅ Save CSV Content to Google Sheets
 def save_csv_to_google_sheets(csv_file, cutoff_date):
-    """Upload CSV content to Google Sheets."""
+    """Upload CSV content to Google Sheets while preserving leading zeros."""
     credentials = get_google_sheets_credentials()
     sheet_name = f"instai-{cutoff_date.replace('-', '')}"
 
@@ -90,7 +90,7 @@ def save_csv_to_google_sheets(csv_file, cutoff_date):
         spreadsheet_metadata = sheet.get(spreadsheetId=GOOGLE_SHEETS_ID).execute()
         sheets = spreadsheet_metadata.get("sheets", [])
         existing_sheets = {s["properties"]["title"] for s in sheets}
-        print(existing_sheets)
+
         # ✅ Create the sheet if it doesn't exist
         if sheet_name not in existing_sheets:
             logger.info(f"🆕 Sheet '{sheet_name}' does not exist. Creating it now...")
@@ -101,14 +101,13 @@ def save_csv_to_google_sheets(csv_file, cutoff_date):
                 spreadsheetId=GOOGLE_SHEETS_ID, body=request_body
             ).execute()
 
+        # ✅ Read CSV and preserve leading zeros
         with open(csv_file, "r", encoding="utf-8") as file:
             reader = csv.reader(file)
             data = []
             for row in reader:
-                try:
-                    row = [int(cell) if cell.isdigit() else cell for cell in row]
-                except ValueError:
-                    pass
+                row[-1] = row[-1].replace("=", "")
+                row = [int(cell) if cell.isdigit() else cell for cell in row]
                 data.append(row)
 
         row_count = len(data) - 1  # Exclude header
@@ -120,44 +119,17 @@ def save_csv_to_google_sheets(csv_file, cutoff_date):
             range=f"{sheet_name}!A:Z",
         ).execute()
 
-        # ✅ Append new CSV data
+        # ✅ Append new CSV data with explicit text format
         sheet.values().append(
             spreadsheetId=GOOGLE_SHEETS_ID,
             range=f"{sheet_name}!B1",
-            valueInputOption="RAW",
+            valueInputOption="RAW",  # RAW prevents automatic conversion
             body={"values": data},
         ).execute()
 
         logger.info(f"✅ CSV data successfully uploaded to Google Sheets.")
     except Exception as e:
-        logger.info(f"❌ Error uploading CSV to Google Sheets: {e}")
-
-
-def generate_fake_data(num_rows=200000):
-    """Generate fake detection data with 200K rows."""
-    logger.info(f"📊 Generating {num_rows} rows of fake data...")
-
-    headers = ["eid", "cid", "photonum", "tag"]
-    data = [
-        [
-            f"E{random.randint(1000, 9999)}",
-            f"C{random.randint(100, 999)}",
-            f"P{random.randint(10000, 99999)}",
-            f"{random.randint(10000, 99999)}",
-        ]
-        for _ in range(num_rows)
-    ]
-
-    temp_dir = tempfile.gettempdir()
-    csv_file = os.path.join(temp_dir, "fake_data.csv")
-
-    with open(csv_file, mode="w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(headers)
-        writer.writerows(data)
-
-    logger.info(f"✅ Fake data CSV file saved: {csv_file}")
-    return csv_file
+        logger.error(f"❌ Error uploading CSV to Google Sheets: {e}")
 
 
 def fetch_data(cutoff_date):
@@ -181,15 +153,20 @@ def fetch_data(cutoff_date):
 
 
 def generate_csv(data):
-    """Generate CSV from PostgreSQL query results."""
+    """Generate CSV from PostgreSQL query results while preserving 5-digit leading zeros."""
     temp_dir = tempfile.gettempdir()
     csv_file = os.path.join(temp_dir, "final_report.csv")
 
-    with open(csv_file, mode="w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=data[0].keys())
+    with open(csv_file, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=data[0].keys(), quoting=csv.QUOTE_ALL)
         writer.writeheader()
-        writer.writerows(data)
 
+        for row in data:
+            # ✅ Excel formula to force the tag column to remain as text
+            row["tag"] = f'="{str(row["tag"]).zfill(DIGIT_LENGTH)}"'
+            writer.writerow(row)
+
+    logger.info(f"✅ CSV successfully written: {csv_file}")
     return csv_file
 
 
@@ -209,14 +186,33 @@ def get_processed_image_count(cutoff_date):
         return 0
 
 
+import csv
+
+
 def send_email(csv_file, cutoff_date):
     """Send final email with CSV attachment via AWS SES."""
 
+    # ✅ Check if file exists
+    if not os.path.exists(csv_file):
+        logger.error(f"❌ CSV file missing: {csv_file}")
+        return
+
+    # ✅ Debug: Print CSV content before sending
+    with open(csv_file, "r", encoding="utf-8") as file:
+        reader = csv.reader(file)
+        for row in reader:
+            logger.info(
+                f"📄 CSV Row Before Sending: {row}"
+            )  # Print to check if "tag" has leading zeros
+
+    # ✅ Read CSV as bytes for attachment
     with open(csv_file, "rb") as file:
         csv_data = file.read()
 
-    total_processed = get_processed_image_count(cutoff_date)
+    logger.info(f"✅ CSV file read successfully: {csv_file}")
 
+    # ✅ Email Content
+    total_processed = get_processed_image_count(cutoff_date)
     email_body = (
         f"Dear Customer,\n\n"
         f"The athlete number detection process for {cutoff_date} is now fully completed.\n\n"
@@ -295,31 +291,31 @@ def lambda_handler(event, context):
 
     logger.info(f"🔍 Checking detection job status for {cutoff_date}...")
 
-    if check_detection_completion(cutoff_date):
-        logger.info("✅ Detection job completed!")
-        data = fetch_data(cutoff_date)
-        if not data:
-            logger.error("⚠️ No data found for the final report.")
-            return {"statusCode": 200, "body": "No data to send"}
+    #  if check_detection_completion(cutoff_date):
+    logger.info("✅ Detection job completed!")
+    data = fetch_data(cutoff_date)
+    if not data:
+        logger.error("⚠️ No data found for the final report.")
+        return {"statusCode": 200, "body": "No data to send"}
 
-        csv_file = generate_csv(data)
-        save_csv_to_google_sheets(csv_file, cutoff_date)
-        send_email(csv_file, cutoff_date)
+    csv_file = generate_csv(data)
+    save_csv_to_google_sheets(csv_file, cutoff_date)
+    send_email(csv_file, cutoff_date)
 
-        # ✅ Stop the EC2 instance
-        stop_instance(instance_id)
+    # ✅ Stop the EC2 instance
+    stop_instance(instance_id)
 
-        # ✅ Disable the scheduler
-        disable_scheduler(scheduler_rule1)
-        disable_scheduler(scheduler_rule2)
+    # ✅ Disable the scheduler
+    disable_scheduler(scheduler_rule1)
+    disable_scheduler(scheduler_rule2)
 
-        return {
-            "statusCode": 200,
-            "body": "Final email sent, instance stopped, and scheduler disabled.",
-        }
-    else:
-        logger.info("⏳ Detection job still in progress...")
-        return {
-            "statusCode": 200,
-            "body": "Job not yet completed, will check again later.",
-        }
+    return {
+        "statusCode": 200,
+        "body": "Final email sent, instance stopped, and scheduler disabled.",
+    }
+    # else:
+    #     logger.info("⏳ Detection job still in progress...")
+    #     return {
+    #         "statusCode": 200,
+    #         "body": "Job not yet completed, will check again later.",
+    #     }
