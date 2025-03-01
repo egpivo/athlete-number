@@ -10,22 +10,25 @@ DATE=$(date +%Y-%m-%d)  # Default to today's date
 REGION="us-east-1"
 MAX_PARALLEL_JOBS=6
 EVENT_IDS=()
+ENV="production"  # Default environment
 
+# Activate Poetry Environment
 source $(poetry env info --path)/bin/activate
 
 # Help function
 usage() {
-    echo "Usage: $0 [-d DATE] [-r REGION] [-j MAX_PARALLEL_JOBS] -e EVENT_ID1 EVENT_ID2 ..."
+    echo "Usage: $0 [-d DATE] [-r REGION] [-j MAX_PARALLEL_JOBS] [-e ENV] -EID_CID1 EID_CID2 ..."
     exit 1
 }
 
 # Parse command-line arguments
-while getopts "d:r:j:e:h" opt; do
+while getopts "d:r:j:e:n:h" opt; do
     case ${opt} in
-        d) DATE=$OPTARG ;;
-        r) REGION=$OPTARG ;;
-        j) MAX_PARALLEL_JOBS=$OPTARG ;;
-        e) shift $((OPTIND - 1)); EVENT_IDS=("$@"); break ;;
+        d) DATE=$OPTARG ;;    # Cutoff date
+        r) REGION=$OPTARG ;;  # AWS region
+        j) MAX_PARALLEL_JOBS=$OPTARG ;;  # Parallel jobs
+        e) shift $((OPTIND - 1)); EVENT_IDS=("$@"); break ;;  # Event IDs
+        n) ENV=$OPTARG ;;  # Environment (test/prod)
         h) usage ;;
         *) usage ;;
     esac
@@ -40,12 +43,12 @@ fi
 # Create logs directory
 mkdir -p logs
 
-echo "📅 Cutoff date set to: $DATE"
+echo "📅 Cutoff date set to: $DATE, 🏗️ Environment: $ENV"
 
-# ✅ Start Python script in the background with `cutoff_date`
-python3 process_s3_log_live.py logs "$DATE" &
+# ✅ Start Python script in the background with `cutoff_date` and `env`
+python3 process_s3_log_live.py logs "$DATE" "$ENV" &
 
-echo "📡 Started process_s3_log_live.py in the background with cutoff_date: $DATE"
+echo "📡 Started process_s3_log_live.py in the background with cutoff_date: $DATE and env: $ENV"
 
 # Function to sync S3
 sync_s3() {
@@ -74,4 +77,4 @@ done
 wait
 exec 3>&-  # Close file descriptor
 
-echo "All sync operations completed."
+echo "✅ All sync operations completed."

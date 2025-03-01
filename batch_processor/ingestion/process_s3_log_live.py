@@ -17,8 +17,9 @@ if (
     CUTOFF_DATE = sys.argv[2]  # Get cutoff_date from shell script
 else:
     CUTOFF_DATE = datetime.now().strftime("%Y-%m-%d")  # Default to today
+ENV = sys.argv[3] if len(sys.argv) > 3 else os.getenv("ENV", "test")
 
-print(f"📅 Using cutoff_date: {CUTOFF_DATE}")
+print(f"📅 Using cutoff_date: {CUTOFF_DATE}, 🏗️ Environment: {ENV}")
 
 # PostgreSQL Connection Config
 PG_HOST = os.getenv("DB_HOST")
@@ -64,25 +65,27 @@ def monitor_logs():
             if line:
                 filename = extract_filename(line.strip())
                 if filename:
-                    insert_filename(filename, CUTOFF_DATE)  # Pass cutoff_date
+                    insert_filename(
+                        filename, CUTOFF_DATE, ENV
+                    )  # Pass cutoff_date & env
         time.sleep(1)
 
 
 # ✅ Insert filename into PostgreSQL
-def insert_filename(filename, cutoff_date):
+def insert_filename(filename, cutoff_date, env):
     conn = get_pg_connection()
     cursor = conn.cursor()
 
     query = f"""
-        INSERT INTO {TABLE_NAME} (image_key, cutoff_date)
-        VALUES (%s, %s)
-        ON CONFLICT (image_key, cutoff_date) DO NOTHING;
+        INSERT INTO {TABLE_NAME} (image_key, cutoff_date, env)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (image_key, cutoff_date, env) DO NOTHING;
     """
 
     try:
-        cursor.execute(query, (filename, cutoff_date))
+        cursor.execute(query, (filename, cutoff_date, env))
         conn.commit()
-        print(f"✅ Inserted: {filename} (cutoff_date: {cutoff_date})")
+        print(f"✅ Inserted: {filename} (cutoff_date: {cutoff_date}, env: {env})")
     except Exception as e:
         print(f"❌ Error inserting {filename}: {e}")
     finally:
@@ -92,5 +95,7 @@ def insert_filename(filename, cutoff_date):
 
 # ✅ Run the script
 if __name__ == "__main__":
-    print(f"📡 Monitoring logs in {LOG_DIR} with cutoff_date {CUTOFF_DATE}...")
+    print(
+        f"📡 Monitoring logs in {LOG_DIR} with cutoff_date {CUTOFF_DATE}, env {ENV}..."
+    )
     monitor_logs()

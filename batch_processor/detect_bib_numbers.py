@@ -132,7 +132,9 @@ async def main():
                 )
 
                 # ✅ Mark keys as processed & update checkpoint asynchronously
-                await async_mark_keys_as_processed(batch_keys, args.cutoff_date)
+                await async_mark_keys_as_processed(
+                    batch_keys, args.cutoff_date, args.env
+                )
                 await async_write_checkpoint_safely(batch_keys[-1], args.cutoff_date)
                 total_processed += len(batch_keys)
                 pbar.update(len(batch_keys))

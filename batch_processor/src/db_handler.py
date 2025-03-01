@@ -42,7 +42,7 @@ def get_processed_keys_from_db(image_keys: list, cutoff_date: str) -> set:
     return processed
 
 
-def mark_keys_as_processed(image_keys: list, cutoff_date: str) -> None:
+def mark_keys_as_processed(image_keys: list, cutoff_date: str, env: str) -> None:
     """Mark keys as processed in the database with a cutoff date."""
     if not image_keys:
         return
@@ -51,11 +51,13 @@ def mark_keys_as_processed(image_keys: list, cutoff_date: str) -> None:
         conn = psycopg2.connect(**DB_CREDENTIALS)
         with conn.cursor() as cur:
             # Use executemany with ON CONFLICT to handle duplicates
-            args = [(key, cutoff_date) for key in image_keys]  # ✅ Include cutoff_date
+            args = [
+                (key, cutoff_date, env) for key in image_keys
+            ]  # ✅ Include cutoff_date
             cur.executemany(
-                f"""INSERT INTO {PROCESSED_KEY_TABLE} (image_key, cutoff_date)
-                   VALUES (%s, %s)
-                   ON CONFLICT (image_key, cutoff_date) DO NOTHING""",
+                f"""INSERT INTO {PROCESSED_KEY_TABLE} (image_key, cutoff_date, env)
+                   VALUES (%s, %s, %s)
+                   ON CONFLICT (image_key, cutoff_date, env) DO NOTHING""",
                 args,
             )
 
@@ -104,5 +106,5 @@ async def async_get_processed_keys_from_db(image_keys, cutoff_date):
     return await asyncio.to_thread(get_processed_keys_from_db, image_keys, cutoff_date)
 
 
-async def async_mark_keys_as_processed(image_keys, cutoff_date):
-    await asyncio.to_thread(mark_keys_as_processed, image_keys, cutoff_date)
+async def async_mark_keys_as_processed(image_keys, cutoff_date, env):
+    await asyncio.to_thread(mark_keys_as_processed, image_keys, cutoff_date, env)
