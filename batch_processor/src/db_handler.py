@@ -12,7 +12,7 @@ dynamodb = boto3.client("dynamodb", region_name=AWS_REGION)
 
 OCR_BATCH_SIZE = int(os.getenv("OCR_BATCH_SIZE", 10))
 CHECKPOINT_TABLE = "athlete_number_detection_image_processing_checkpoint"
-PROCESSED_KEY_TABLE = "athlete_number_detection_images"
+PROCESSED_KEY_TABLE = "athlete_number_detection_processed_image"
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -53,10 +53,9 @@ def mark_keys_as_processed(image_keys: list, cutoff_date: str) -> None:
             # Use executemany with ON CONFLICT to handle duplicates
             args = [(key, cutoff_date) for key in image_keys]  # ✅ Include cutoff_date
             cur.executemany(
-                f"""UPDATE {PROCESSED_KEY_TABLE}
-                    SET status = 'processed', processed_timestamp = NOW()
-                    WHERE image_key = %s AND cutoff_date = %s
-                """,
+                f"""INSERT INTO {PROCESSED_KEY_TABLE} (image_key, cutoff_date)
+                   VALUES (%s, %s)
+                   ON CONFLICT (image_key, cutoff_date) DO NOTHING""",
                 args,
             )
 

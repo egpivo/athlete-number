@@ -27,7 +27,7 @@ PG_DB = os.getenv("DB_NAME")
 PG_USER = os.getenv("DB_USER")
 PG_PASSWORD = os.getenv("DB_PW")
 
-TABLE_NAME = "athlete_number_detection_images"
+TABLE_NAME = "athlete_number_detection_ingestion"
 LOG_DIR = sys.argv[1] if len(sys.argv) > 1 else "logs"
 
 # ✅ Ensure the log directory exists
@@ -48,8 +48,8 @@ def extract_filename(log_line):
         r"to s3://[^/]+/(.*?)$", log_line
     )  # Extract only destination path
     if match:
-        image_key = match.group(1)  # ✅ Extracted relative path
-        print(f"✅ Extracted image_key: {image_key}")  # Debug print
+        image_key = match.group(1)
+        print(f"✅ Extracted image_key: {image_key}")
         return image_key
     return None
 
