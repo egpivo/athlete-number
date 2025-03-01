@@ -46,6 +46,11 @@ parser.add_argument(
     default="test",
     help="Environment",
 )
+parser.add_argument(
+    "--force_start",
+    action="store_true",
+    help="Force restart the process by resetting the last checkpoint.",
+)
 args = parser.parse_args()
 
 
@@ -53,8 +58,13 @@ async def main():
     """Main pipeline for processing all images in batches."""
     logger.info("🚀 Starting incremental image processing...")
 
-    last_processed_key = await async_get_last_checkpoint(args.cutoff_date)
-    logger.info(f"🔄 Resuming from checkpoint: {last_processed_key or 'Beginning'}")
+    last_processed_key = (
+        None if args.force_start else await async_get_last_checkpoint(args.cutoff_date)
+    )
+    if args.force_start:
+        logger.info("🚀 Force restart enabled. Starting from the beginning...")
+    else:
+        logger.info(f"🔄 Resuming from checkpoint: {last_processed_key or 'Beginning'}")
 
     ocr_service = await initialize_ocr()
     total_processed = 0
