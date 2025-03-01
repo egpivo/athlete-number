@@ -40,8 +40,12 @@ fi
 # Create logs directory
 mkdir -p logs
 
-# Start Python script to process logs in real-time
-python3 process_s3_log_live.py logs &
+echo "📅 Cutoff date set to: $DATE"
+
+# ✅ Start Python script in the background with `cutoff_date`
+python3 process_s3_log_live.py logs "$DATE" &
+
+echo "📡 Started process_s3_log_live.py in the background with cutoff_date: $DATE"
 
 # Function to sync S3
 sync_s3() {
