@@ -12,57 +12,69 @@ MAX_PARALLEL_JOBS=6
 EVENT_IDS=()
 ENV="production"  # Default environment
 
-# Activate Poetry Environment
-source $(poetry env info --path)/bin/activate
-
-# Help function
-usage() {
-    echo "Usage: $0 [-d DATE] [-r REGION] [-j MAX_PARALLEL_JOBS] [-e ENV] -EID_CID1 EID_CID2 ..."
+# ✅ Activate Poetry Environment safely
+POETRY_ENV_PATH=$(poetry env info --path 2>/dev/null)
+if [ -d "$POETRY_ENV_PATH" ]; then
+    source "$POETRY_ENV_PATH/bin/activate"
+else
+    echo "⚠️ Poetry environment not found! Ensure that 'poetry install' has been run."
     exit 1
-}
+fi
 
-# Parse command-line arguments
+# ✅ Parse command-line arguments correctly
 while getopts "d:r:j:e:n:h" opt; do
     case ${opt} in
         d) DATE=$OPTARG ;;    # Cutoff date
         r) REGION=$OPTARG ;;  # AWS region
         j) MAX_PARALLEL_JOBS=$OPTARG ;;  # Parallel jobs
-        e) shift $((OPTIND - 1)); EVENT_IDS=("$@"); break ;;  # Event IDs
+        e) EVENT_IDS+=("$OPTARG") ;;  # Collect event IDs
         n) ENV=$OPTARG ;;  # Environment (test/prod)
         h) usage ;;
         *) usage ;;
     esac
 done
 
-# Validate event IDs
+# ✅ Shift remaining positional arguments to EVENT_IDS
+shift $((OPTIND - 1))
+
+# ✅ Validate event IDs
 if [ ${#EVENT_IDS[@]} -eq 0 ]; then
-    echo "Error: Provide at least one event ID with -e."
-    usage
+    echo "❌ Error: Provide at least one event ID with -e."
+    exit 1
 fi
 
-# Create logs directory
+# ✅ Create logs directory
 mkdir -p logs
 
 echo "📅 Cutoff date set to: $DATE, 🏗️ Environment: $ENV"
 
-# ✅ Start Python script in the background with `cutoff_date` and `env`
+# ✅ Start Python script safely
 python3 process_s3_log_live.py logs "$DATE" "$ENV" &
+PYTHON_PID=$!
+sleep 5
 
-echo "📡 Started process_s3_log_live.py in the background with cutoff_date: $DATE and env: $ENV"
+if ! kill -0 $PYTHON_PID 2>/dev/null; then
+    echo "❌ Error: Python ingestion process failed to start!"
+    exit 1
+fi
+echo "📡 Started process_s3_log_live.py with cutoff_date: $DATE and env: $ENV"
 
-# Function to sync S3
+# ✅ Function to sync S3 with error handling
 sync_s3() {
     local EID_CID=$1
-    echo "Syncing ${EID_CID}..."
-    aws s3 sync "${SOURCE_BUCKET}/${EID_CID}/" "${DEST_BUCKET}/${DATE}/${EID_CID}" \
-        --delete --region "${REGION}" | tee -a "logs/${EID_CID}.log" &
+    echo "🚀 Syncing ${EID_CID}..."
+
+    if ! aws s3 sync "${SOURCE_BUCKET}/${EID_CID}/" "${DEST_BUCKET}/${DATE}/${EID_CID}" \
+        --delete --region "${REGION}" | tee -a "logs/${EID_CID}.log"; then
+        echo "❌ Error syncing ${EID_CID}. Check logs/${EID_CID}.log"
+    fi
 }
 
-# Run jobs in parallel
-SEMAPHORE="sync_semaphore"
-mkfifo ${SEMAPHORE}
-exec 3<>${SEMAPHORE}
-rm ${SEMAPHORE}
+# ✅ Run jobs in parallel safely
+SEMAPHORE=$(mktemp)
+mkfifo "$SEMAPHORE"
+exec 3<>"$SEMAPHORE"
+rm "$SEMAPHORE"
 
 for ((i = 0; i < MAX_PARALLEL_JOBS; i++)); do echo; done >&3
 
