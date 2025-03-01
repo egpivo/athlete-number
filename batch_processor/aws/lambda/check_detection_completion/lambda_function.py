@@ -32,7 +32,6 @@ ses_client = boto3.client("ses", region_name="us-east-1")
 ec2_client = boto3.client("ec2", region_name="us-east-1")
 events_client = boto3.client("events", region_name="us-east-1")
 SECRET_NAME = "GoogleSheetsServiceAccountBibNumber"
-SHEET_NAME = os.getenv("SHEET_NAME")
 
 # ✅ PostgreSQL Configuration
 DB_CONFIG = {
@@ -75,9 +74,11 @@ def get_google_sheets_credentials():
 
 
 # ✅ Save CSV Content to Google Sheets
-def save_csv_to_google_sheets(csv_file):
+def save_csv_to_google_sheets(csv_file, cutoff_date):
     """Upload CSV content to Google Sheets."""
     credentials = get_google_sheets_credentials()
+    sheet_name = f"instai-{cutoff_date.replace('-', '')}"
+
     if not credentials:
         logger.error("⚠️ Google Sheets credentials missing. Skipping CSV upload.")
         return
@@ -85,6 +86,20 @@ def save_csv_to_google_sheets(csv_file):
     try:
         service = build("sheets", "v4", credentials=credentials)
         sheet = service.spreadsheets()
+
+        spreadsheet_metadata = sheet.get(spreadsheetId=GOOGLE_SHEETS_ID).execute()
+        sheets = spreadsheet_metadata.get("sheets", [])
+        existing_sheets = {s["properties"]["title"] for s in sheets}
+        print(existing_sheets)
+        # ✅ Create the sheet if it doesn't exist
+        if sheet_name not in existing_sheets:
+            logger.info(f"🆕 Sheet '{sheet_name}' does not exist. Creating it now...")
+            request_body = {
+                "requests": [{"addSheet": {"properties": {"title": sheet_name}}}]
+            }
+            sheet.batchUpdate(
+                spreadsheetId=GOOGLE_SHEETS_ID, body=request_body
+            ).execute()
 
         with open(csv_file, "r", encoding="utf-8") as file:
             reader = csv.reader(file)
@@ -102,13 +117,13 @@ def save_csv_to_google_sheets(csv_file):
         # ✅ Clear old data before updating
         sheet.values().clear(
             spreadsheetId=GOOGLE_SHEETS_ID,
-            range=f"{SHEET_NAME}!A:Z",
+            range=f"{sheet_name}!A:Z",
         ).execute()
 
         # ✅ Append new CSV data
         sheet.values().append(
             spreadsheetId=GOOGLE_SHEETS_ID,
-            range=f"{SHEET_NAME}!B1",
+            range=f"{sheet_name}!B1",
             valueInputOption="RAW",
             body={"values": data},
         ).execute()
@@ -116,6 +131,33 @@ def save_csv_to_google_sheets(csv_file):
         logger.info(f"✅ CSV data successfully uploaded to Google Sheets.")
     except Exception as e:
         logger.info(f"❌ Error uploading CSV to Google Sheets: {e}")
+
+
+def generate_fake_data(num_rows=200000):
+    """Generate fake detection data with 200K rows."""
+    logger.info(f"📊 Generating {num_rows} rows of fake data...")
+
+    headers = ["eid", "cid", "photonum", "tag"]
+    data = [
+        [
+            f"E{random.randint(1000, 9999)}",
+            f"C{random.randint(100, 999)}",
+            f"P{random.randint(10000, 99999)}",
+            f"{random.randint(10000, 99999)}",
+        ]
+        for _ in range(num_rows)
+    ]
+
+    temp_dir = tempfile.gettempdir()
+    csv_file = os.path.join(temp_dir, "fake_data.csv")
+
+    with open(csv_file, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(headers)
+        writer.writerows(data)
+
+    logger.info(f"✅ Fake data CSV file saved: {csv_file}")
+    return csv_file
 
 
 def fetch_data(cutoff_date):
@@ -151,18 +193,38 @@ def generate_csv(data):
     return csv_file
 
 
+def get_processed_image_count(cutoff_date):
+    """Retrieve the total count of processed images from PostgreSQL."""
+    try:
+        with pg8000.connect(**DB_CONFIG) as conn:
+            cursor = conn.cursor()
+            query = "SELECT COUNT(*) FROM athlete_number_detection_processed_image WHERE cutoff_date = %s"
+            cursor.execute(query, (cutoff_date,))
+            count = cursor.fetchone()[0]
+
+        logger.info(f"✅ Processed images for {cutoff_date}: {count}")
+        return count
+    except Exception as e:
+        logger.error(f"❌ Error counting processed images: {e}")
+        return 0
+
+
 def send_email(csv_file, cutoff_date):
     """Send final email with CSV attachment via AWS SES."""
-    email_body = (
-        f"Dear Customer,\n\n"
-        f"The athlete number detection process for {cutoff_date} is now **fully completed**. 🎉\n\n"
-        f"✅ The final report has been attached.\n"
-        f"📊 The processed data is also available in Google Sheets.\n\n"
-        f"Best Regards,\nInstAI"
-    )
 
     with open(csv_file, "rb") as file:
         csv_data = file.read()
+
+    total_processed = get_processed_image_count(cutoff_date)
+
+    email_body = (
+        f"Dear Customer,\n\n"
+        f"The athlete number detection process for {cutoff_date} is now fully completed.\n\n"
+        f"\t- The number of images processed: {total_processed}\n"
+        f"\t- The final report has been attached.\n"
+        f"\t- The processed data is also available in Google Sheets.\n\n"
+        f"Best Regards,\nInstAI"
+    )
 
     msg = MIMEMultipart()
     msg["From"] = SENDER_EMAIL
@@ -241,8 +303,8 @@ def lambda_handler(event, context):
             return {"statusCode": 200, "body": "No data to send"}
 
         csv_file = generate_csv(data)
-        save_csv_to_google_sheets(csv_file)
-        # send_email(csv_file, cutoff_date)
+        save_csv_to_google_sheets(csv_file, cutoff_date)
+        send_email(csv_file, cutoff_date)
 
         # ✅ Stop the EC2 instance
         stop_instance(instance_id)
