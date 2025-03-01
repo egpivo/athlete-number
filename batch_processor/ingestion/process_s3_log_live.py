@@ -34,9 +34,12 @@ def get_pg_connection():
 
 # Extract filename from S3 sync log line
 def extract_filename(log_line):
-    match = re.search(r"download: (.*?) to", log_line)
+    # ✅ Update regex to match "copy:" instead of "download:"
+    match = re.search(r"copy: (.*?) to", log_line)
     if match:
-        return match.group(1)
+        filename = match.group(1)
+        print(f"✅ Extracted Filename: {filename}")  # Debug print
+        return filename
     return None
 
 
