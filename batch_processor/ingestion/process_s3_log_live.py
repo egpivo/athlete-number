@@ -74,13 +74,13 @@ def insert_filename(filename, cutoff_date):
     cursor = conn.cursor()
 
     query = f"""
-        INSERT INTO {TABLE_NAME} (image_key, cutoff_date, ingestion_timestamp, status)
-        VALUES (%s, %s, %s, 'pending')
+        INSERT INTO {TABLE_NAME} (image_key, cutoff_date)
+        VALUES (%s, %s)
         ON CONFLICT (image_key, cutoff_date) DO NOTHING;
     """
 
     try:
-        cursor.execute(query, (filename, cutoff_date, datetime.now()))
+        cursor.execute(query, (filename, cutoff_date))
         conn.commit()
         print(f"✅ Inserted: {filename} (cutoff_date: {cutoff_date})")
     except Exception as e:
