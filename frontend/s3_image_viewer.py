@@ -61,7 +61,7 @@ def fetch_random_sample(cutoff_date):
             conn.close()
 
 
-def fetch_results_from_postgres(cutoff_date, eid, cid, photonum):
+def fetch_results_from_postgres(cutoff_date, eid, cid, photonum, env):
     """Fetch detection results (EID, CID, Photonum, grouped Tags) from PostgreSQL."""
     try:
         conn = pg8000.connect(
@@ -76,10 +76,11 @@ def fetch_results_from_postgres(cutoff_date, eid, cid, photonum):
         query = """
         SELECT eid, cid, photonum, array_agg(tag) AS tags
         FROM allsports_bib_number_detection
-        WHERE cutoff_date = %s AND eid = %s AND cid = %s AND photonum = %s
+        WHERE cutoff_date = %s AND env = %s
+        AND eid = %s AND cid = %s AND photonum = %s
         GROUP BY eid, cid, photonum
         """
-        cursor.execute(query, (cutoff_date, eid, cid, photonum))
+        cursor.execute(query, (cutoff_date, env, eid, cid, photonum))
         rows = cursor.fetchall()
 
         return pd.DataFrame(rows, columns=["EID", "CID", "Photonum", "Tags"])
@@ -92,7 +93,7 @@ def fetch_results_from_postgres(cutoff_date, eid, cid, photonum):
             conn.close()
 
 
-def fetch_image_keys_from_postgres(cutoff_date, eid, cid, photonum):
+def fetch_image_keys_from_postgres(cutoff_date, eid, cid, photonum, env):
     """Fetch all image keys from PostgreSQL for a given EID, CID, and Photonum."""
     try:
         conn = pg8000.connect(
@@ -106,12 +107,13 @@ def fetch_image_keys_from_postgres(cutoff_date, eid, cid, photonum):
 
         query = """
         SELECT image_key FROM athlete_number_detection_processed_image
-        WHERE cutoff_date = %s AND image_key ILIKE %s
+        WHERE cutoff_date = %s AND env = %s
+        AND image_key ILIKE %s
         ORDER BY image_key
         """
         search_pattern = f"images/{cutoff_date}/{eid}_{cid}/{eid}_{cid}_{photonum}_%"
 
-        cursor.execute(query, (cutoff_date, search_pattern))
+        cursor.execute(query, (cutoff_date, env, search_pattern))
         rows = cursor.fetchall()
 
         return [row[0] for row in rows]
@@ -149,7 +151,7 @@ cutoff_date = st.sidebar.text_input("📅 Enter cutoff date (YYYY-MM-DD):", "202
 eid = st.sidebar.text_input("🏅 Enter EID (Required):", "")
 cid = st.sidebar.text_input("🎽 Enter CID (Required):", "")
 photonum = st.sidebar.text_input("📸 Enter Photonum (Required):", "")
-
+env = st.sidebar.selectbox("🌍 Select Environment:", ["production", "test"], index=0)
 # Buttons for triggering search
 trigger_search = False
 
@@ -186,7 +188,7 @@ if (
     photonum = st.session_state["photonum"]
 
     # Fetch detection results (eid, cid, photonum, grouped tags)
-    results_df = fetch_results_from_postgres(cutoff_date, eid, cid, photonum)
+    results_df = fetch_results_from_postgres(cutoff_date, eid, cid, photonum, env)
 
     if not results_df.empty:
         st.success(f"✅ Found {len(results_df)} results.")
@@ -198,7 +200,9 @@ if (
         # Image Preview
         st.subheader("🖼️ Image Previews")
 
-        image_keys = fetch_image_keys_from_postgres(cutoff_date, eid, cid, photonum)
+        image_keys = fetch_image_keys_from_postgres(
+            cutoff_date, eid, cid, photonum, env
+        )
 
         if image_keys:
             st.write(f"🔍 **Found {len(image_keys)} images for this athlete**")
