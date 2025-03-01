@@ -44,11 +44,13 @@ def get_pg_connection():
 
 # ✅ Extract filename from S3 sync log line
 def extract_filename(log_line):
-    match = re.search(r"copy: s3://[^/]+/(.*?) to", log_line)
+    match = re.search(
+        r"to s3://[^/]+/(.*?)$", log_line
+    )  # Extract only destination path
     if match:
-        filename = match.group(1)
-        print(f"✅ Extracted Filename: {filename}")  # Debug print
-        return filename
+        image_key = match.group(1)  # ✅ Extracted relative path
+        print(f"✅ Extracted image_key: {image_key}")  # Debug print
+        return image_key
     return None
 
 
