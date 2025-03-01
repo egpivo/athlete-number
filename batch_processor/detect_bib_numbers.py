@@ -3,7 +3,7 @@ import asyncio
 import logging
 import os
 
-from src.config import DEST_BUCKET, DEST_FOLDER, MAX_IMAGES
+from src.config import DEST_BUCKET, DEST_FOLDER
 from src.db_handler import (
     async_get_last_checkpoint,
     async_get_processed_keys_from_db,
@@ -26,7 +26,7 @@ parser = argparse.ArgumentParser(description="Batch process images from S3")
 parser.add_argument(
     "--max_images",
     type=int,
-    default=MAX_IMAGES,
+    default=None,
     help="Maximum number of images to process",
 )
 parser.add_argument(

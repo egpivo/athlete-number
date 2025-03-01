@@ -14,7 +14,6 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 # Processing settings
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", 10))
-MAX_IMAGES = int(os.getenv("MAX_IMAGES", 50))
 OUTPUT_CSV = os.getenv("OUTPUT_CSV", "detection_results.csv")
 
 
