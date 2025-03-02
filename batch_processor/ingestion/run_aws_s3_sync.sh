@@ -1,6 +1,8 @@
 #!/bin/bash
 #
 # Updated Sync Script with Real-time PostgreSQL Integration
+# Example
+# - ./run_aws_s3_sync.sh -d 2025-03-02 -n production 778759_3307 778759_6252 778759_5876
 #
 
 # Default parameters
@@ -22,24 +24,24 @@ else
 fi
 
 # ✅ Parse command-line arguments correctly
-while getopts "d:r:j:e:n:h" opt; do
+while getopts "d:r:j:n:h" opt; do
     case ${opt} in
         d) DATE=$OPTARG ;;    # Cutoff date
         r) REGION=$OPTARG ;;  # AWS region
         j) MAX_PARALLEL_JOBS=$OPTARG ;;  # Parallel jobs
-        e) EVENT_IDS+=("$OPTARG") ;;  # Collect event IDs
         n) ENV=$OPTARG ;;  # Environment (test/prod)
         h) usage ;;
         *) usage ;;
     esac
 done
 
-# ✅ Shift remaining positional arguments to EVENT_IDS
+# ✅ Shift remaining positional arguments into EVENT_IDS
 shift $((OPTIND - 1))
+EVENT_IDS=("$@")  # Capture all remaining args as event IDs
 
 # ✅ Validate event IDs
 if [ ${#EVENT_IDS[@]} -eq 0 ]; then
-    echo "❌ Error: Provide at least one event ID with -e."
+    echo "❌ Error: Provide at least one event ID."
     exit 1
 fi
 
@@ -47,6 +49,7 @@ fi
 mkdir -p logs
 
 echo "📅 Cutoff date set to: $DATE, 🏗️ Environment: $ENV"
+echo "🎯 Event IDs to process: ${EVENT_IDS[*]}"
 
 # ✅ Start Python script safely
 python3 process_s3_log_live.py logs "$DATE" "$ENV" &
