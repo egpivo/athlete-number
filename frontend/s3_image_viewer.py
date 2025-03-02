@@ -66,8 +66,8 @@ def fetch_detection_stats(cutoff_date, env):
             GROUP BY eid, cid
         )
         SELECT
-            d.eid,
-            d.cid,
+            d.eid::TEXT,
+            d.cid::TEXT,
             d.detected_photonum_count,
             COALESCE(p.processed_photonum_count, 0) AS processed_photonum_count,
             COALESCE(
