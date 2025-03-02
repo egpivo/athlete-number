@@ -70,10 +70,14 @@ def fetch_detection_stats(cutoff_date, env):
             d.cid,
             d.detected_photonum_count,
             COALESCE(p.processed_photonum_count, 0) AS processed_photonum_count,
-            ROUND(
-                COALESCE(p.processed_photonum_count::FLOAT / NULLIF(d.detected_photonum_count, 0), 0)::NUMERIC,
-                3
-            ) AS success_rate
+            COALESCE(
+                ROUND(
+                    CASE
+                        WHEN COALESCE(processed_photonum_count, 0) = 0 THEN 0  -- Avoid division by 0
+                        ELSE detected_photonum_count::NUMERIC / processed_photonum_count::NUMERIC
+                    END,
+                3), 0.000  -- Ensure NULL → 0.000
+            ) AS success_rate  -- Round to 3 decimal places
         FROM detected_photo d
         LEFT JOIN processed_photo p ON d.eid = p.eid AND d.cid = p.cid
         ORDER BY d.eid, d.cid;
