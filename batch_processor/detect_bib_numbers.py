@@ -81,10 +81,11 @@ async def main():
             image_keys, args.cutoff_date
         )
         processed_keys = set(str(key) for key in processed_keys)
+        filtered_keys = [key for key in image_keys if "_tn_" in key]
         unprocessed_keys = (
             [key for key in image_keys if key not in processed_keys]
             if processed_keys
-            else image_keys
+            else filtered_keys
         )
 
         if args.max_images:
