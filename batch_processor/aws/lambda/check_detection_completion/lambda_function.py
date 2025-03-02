@@ -73,9 +73,8 @@ def get_google_sheets_credentials():
         return None
 
 
-# ✅ Save CSV Content to Google Sheets
 def save_csv_to_google_sheets(csv_file, cutoff_date):
-    """Upload CSV content to Google Sheets while preserving leading zeros."""
+    """Upload CSV content to Google Sheets while preserving leading zeros for `tag` and keeping `photonum` as a number."""
     credentials = get_google_sheets_credentials()
     sheet_name = f"instai-{cutoff_date.replace('-', '')}"
 
@@ -87,43 +86,71 @@ def save_csv_to_google_sheets(csv_file, cutoff_date):
         service = build("sheets", "v4", credentials=credentials)
         sheet = service.spreadsheets()
 
+        # Retrieve the spreadsheet metadata to get the sheet ID
         spreadsheet_metadata = sheet.get(spreadsheetId=GOOGLE_SHEETS_ID).execute()
         sheets = spreadsheet_metadata.get("sheets", [])
-        existing_sheets = {s["properties"]["title"] for s in sheets}
+        sheet_id = None
+        for s in sheets:
+            if s["properties"]["title"] == sheet_name:
+                sheet_id = s["properties"]["sheetId"]
+                break
 
-        # ✅ Create the sheet if it doesn't exist
-        if sheet_name not in existing_sheets:
+        if sheet_id is None:
+            # Create the sheet if it doesn't exist
             logger.info(f"🆕 Sheet '{sheet_name}' does not exist. Creating it now...")
             request_body = {
                 "requests": [{"addSheet": {"properties": {"title": sheet_name}}}]
             }
-            sheet.batchUpdate(
+            response = sheet.batchUpdate(
                 spreadsheetId=GOOGLE_SHEETS_ID, body=request_body
             ).execute()
+            sheet_id = response["replies"][0]["addSheet"]["properties"]["sheetId"]
 
-        # ✅ Read CSV and preserve leading zeros
+        # Define the range to format ONLY the `tag` column (Column E) as plain text
+        range_to_format = {
+            "sheetId": sheet_id,
+            "startRowIndex": 1,  # Start from the second row (skip header)
+            "startColumnIndex": 4,  # Column E (zero-indexed)
+            "endColumnIndex": 5,  # Only Column E
+        }
+
+        # Apply plain text formatting to `tag` column
+        format_request = {
+            "repeatCell": {
+                "range": range_to_format,
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "TEXT"}}},
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        }
+
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=GOOGLE_SHEETS_ID, body={"requests": [format_request]}
+        ).execute()
+
+        logger.info(f"✅ Applied plain text format to 'tag' column in '{sheet_name}'.")
+
+        # Read CSV and prepare data
         with open(csv_file, "r", encoding="utf-8") as file:
             reader = csv.reader(file)
             data = []
             for row in reader:
-                row[-1] = row[-1].replace("=", "")
-                row = [int(cell) if cell.isdigit() else cell for cell in row]
+                row[-1] = row[-1].strip("'")
                 data.append(row)
 
         row_count = len(data) - 1  # Exclude header
         logger.info(f"📊 CSV Row Count (excluding header): {row_count}")
 
-        # ✅ Clear old data before updating
+        # Clear old data before updating
         sheet.values().clear(
             spreadsheetId=GOOGLE_SHEETS_ID,
             range=f"{sheet_name}!A:Z",
         ).execute()
 
-        # ✅ Append new CSV data with explicit text format
+        # Append new CSV data with RAW input option to prevent automatic conversion
         sheet.values().append(
             spreadsheetId=GOOGLE_SHEETS_ID,
             range=f"{sheet_name}!B1",
-            valueInputOption="RAW",  # RAW prevents automatic conversion
+            valueInputOption="RAW",
             body={"values": data},
         ).execute()
 
@@ -162,8 +189,9 @@ def generate_csv(data):
         writer.writeheader()
 
         for row in data:
-            # ✅ Excel formula to force the tag column to remain as text
-            row["tag"] = f'="{str(row["tag"]).zfill(DIGIT_LENGTH)}"'
+            row[
+                "tag"
+            ] = f"'{row['tag'].zfill(DIGIT_LENGTH)}'"  # ✅ Wrap tag in single quotes to prevent conversion
             writer.writerow(row)
 
     logger.info(f"✅ CSV successfully written: {csv_file}")
@@ -186,9 +214,6 @@ def get_processed_image_count(cutoff_date):
         return 0
 
 
-import csv
-
-
 def send_email(csv_file, cutoff_date):
     """Send final email with CSV attachment via AWS SES."""
 
@@ -198,12 +223,12 @@ def send_email(csv_file, cutoff_date):
         return
 
     # ✅ Debug: Print CSV content before sending
-    with open(csv_file, "r", encoding="utf-8") as file:
-        reader = csv.reader(file)
-        for row in reader:
-            logger.info(
-                f"📄 CSV Row Before Sending: {row}"
-            )  # Print to check if "tag" has leading zeros
+    # with open(csv_file, "r", encoding="utf-8") as file:
+    #     reader = csv.reader(file)
+    #     for row in reader:
+    #         logger.info(
+    #             f"📄 CSV Row Before Sending: {row}"
+    #         )
 
     # ✅ Read CSV as bytes for attachment
     with open(csv_file, "rb") as file:

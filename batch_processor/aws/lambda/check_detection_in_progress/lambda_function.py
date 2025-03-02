@@ -16,7 +16,8 @@ from googleapiclient.discovery import build
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 # ✅ Load environment variables
 load_dotenv()
@@ -37,7 +38,7 @@ RECIPIENT_EMAILS = [
 TEST_SUBJECT = "[InstAI] Bib Number Detection Report - TEST"
 PRODUCTION_SUBJECT = "[InstAI] Bib Number Detection Report - PROCESSED IMAGES"
 GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID")
-
+DIGIT_LENGTH = 5
 # ✅ PostgreSQL Configuration
 DB_CONFIG = {
     "host": os.getenv("DB_HOST"),
@@ -68,10 +69,11 @@ def get_google_sheets_credentials():
         return None
 
 
-# ✅ Log Email Status to Google Sheets
-def save_csv_to_google_sheets(csv_file):
-    """Upload CSV content to Google Sheets."""
+def save_csv_to_google_sheets(csv_file, cutoff_date):
+    """Upload CSV content to Google Sheets while preserving leading zeros for `tag` and keeping `photonum` as a number."""
     credentials = get_google_sheets_credentials()
+    sheet_name = f"instai-{cutoff_date.replace('-', '')}"
+
     if not credentials:
         logger.error("⚠️ Google Sheets credentials missing. Skipping CSV upload.")
         return
@@ -80,34 +82,77 @@ def save_csv_to_google_sheets(csv_file):
         service = build("sheets", "v4", credentials=credentials)
         sheet = service.spreadsheets()
 
+        # Retrieve the spreadsheet metadata to get the sheet ID
+        spreadsheet_metadata = sheet.get(spreadsheetId=GOOGLE_SHEETS_ID).execute()
+        sheets = spreadsheet_metadata.get("sheets", [])
+        sheet_id = None
+        for s in sheets:
+            if s["properties"]["title"] == sheet_name:
+                sheet_id = s["properties"]["sheetId"]
+                break
+
+        if sheet_id is None:
+            # Create the sheet if it doesn't exist
+            logger.info(f"🆕 Sheet '{sheet_name}' does not exist. Creating it now...")
+            request_body = {
+                "requests": [{"addSheet": {"properties": {"title": sheet_name}}}]
+            }
+            response = sheet.batchUpdate(
+                spreadsheetId=GOOGLE_SHEETS_ID, body=request_body
+            ).execute()
+            sheet_id = response["replies"][0]["addSheet"]["properties"]["sheetId"]
+
+        # Define the range to format ONLY the `tag` column (Column E) as plain text
+        range_to_format = {
+            "sheetId": sheet_id,
+            "startRowIndex": 1,  # Start from the second row (skip header)
+            "startColumnIndex": 4,  # Column E (zero-indexed)
+            "endColumnIndex": 5,  # Only Column E
+        }
+
+        # Apply plain text formatting to `tag` column
+        format_request = {
+            "repeatCell": {
+                "range": range_to_format,
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "TEXT"}}},
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        }
+
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=GOOGLE_SHEETS_ID, body={"requests": [format_request]}
+        ).execute()
+
+        logger.info(f"✅ Applied plain text format to 'tag' column in '{sheet_name}'.")
+
+        # Read CSV and prepare data
         with open(csv_file, "r", encoding="utf-8") as file:
             reader = csv.reader(file)
             data = []
             for row in reader:
-                try:
-                    row = [int(cell) for cell in row]
-                except ValueError:
-                    pass
+                row[-1] = row[-1].strip("'")
                 data.append(row)
 
-        row_count = len(data) - 1
+        row_count = len(data) - 1  # Exclude header
         logger.info(f"📊 CSV Row Count (excluding header): {row_count}")
 
-        body = {"values": data}
+        # Clear old data before updating
         sheet.values().clear(
             spreadsheetId=GOOGLE_SHEETS_ID,
-            range=f"{SHEET_NAME}!B:Z",  # Clears all columns in the sheet
+            range=f"{sheet_name}!A:Z",
         ).execute()
+
+        # Append new CSV data with RAW input option to prevent automatic conversion
         sheet.values().append(
             spreadsheetId=GOOGLE_SHEETS_ID,
-            range=f"{SHEET_NAME}!B1",
+            range=f"{sheet_name}!B1",
             valueInputOption="RAW",
-            body=body,
+            body={"values": data},
         ).execute()
 
         logger.info(f"✅ CSV data successfully uploaded to Google Sheets.")
     except Exception as e:
-        logger.info(f"❌ Error uploading CSV to Google Sheets: {e}")
+        logger.error(f"❌ Error uploading CSV to Google Sheets: {e}")
 
 
 # ✅ Fetch Detection Data from PostgreSQL
@@ -133,15 +178,23 @@ def fetch_data(cutoff_date, env):
 
 # ✅ Generate CSV Report
 def generate_csv(data):
-    """Generate CSV from PostgreSQL query results."""
+    """Generate CSV from PostgreSQL query results while preserving 5-digit leading zeros."""
     temp_dir = tempfile.gettempdir()
-    csv_file = os.path.join(temp_dir, "report.csv")
+    csv_file = os.path.join(temp_dir, "final_report.csv")
 
-    with open(csv_file, mode="w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=data[0].keys())
+    with open(csv_file, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(
+            file, fieldnames=data[0].keys(), quoting=csv.QUOTE_MINIMAL
+        )  # ✅ Avoid unnecessary quotes
         writer.writeheader()
-        writer.writerows(data)
 
+        for row in data:
+            row[
+                "tag"
+            ] = f"'{row['tag'].zfill(DIGIT_LENGTH)}'"  # ✅ Wrap tag in single quotes to prevent conversion
+            writer.writerow(row)
+
+    logger.info(f"✅ CSV successfully written: {csv_file}")
     return csv_file
 
 
@@ -212,11 +265,11 @@ def lambda_handler(event, context):
 
     data = fetch_data(cutoff_date, env)
     if not data:
-        logger.error("⚠️ No data found.")
+        logger.warning("⚠️ No data found.")
         return {"statusCode": 200, "body": "No data to send"}
 
     csv_file = generate_csv(data)
-    save_csv_to_google_sheets(csv_file)
+    save_csv_to_google_sheets(csv_file, cutoff_date)
     send_email(csv_file, env, cutoff_date)
 
     return {"statusCode": 200, "body": f"CSV email sent successfully"}
