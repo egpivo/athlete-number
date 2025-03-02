@@ -132,17 +132,17 @@ def save_csv_to_google_sheets(csv_file, cutoff_date):
         logger.error(f"❌ Error uploading CSV to Google Sheets: {e}")
 
 
-def fetch_data(cutoff_date):
+def fetch_data(cutoff_date, env):
     """Fetch detection data from PostgreSQL."""
     try:
         with pg8000.connect(**DB_CONFIG) as conn:
             cursor = conn.cursor()
-            query = """
+            query = f"""
             SELECT eid, cid, photonum, tag
             FROM allsports_bib_number_detection
-            WHERE cutoff_date = %s AND tag <> ''
+            WHERE cutoff_date = %s AND env = %s AND tag <> ''
             """
-            cursor.execute(query, (cutoff_date,))
+            cursor.execute(query, (cutoff_date, env))
             return [
                 {"eid": row[0], "cid": row[1], "photonum": row[2], "tag": row[3]}
                 for row in cursor.fetchall()
@@ -285,15 +285,16 @@ def disable_scheduler(rule_name):
 # ✅ AWS Lambda Handler
 def lambda_handler(event, context):
     cutoff_date = event.get("cutoff_date", "2025-02-28")
+    env = event.get("env", "test")
     instance_id = event.get("instance_id", "i-0afd9f4befb29399f")
     scheduler_rule1 = event.get("scheduler_rule1", "HourlyReportTrigger")
     scheduler_rule2 = event.get("scheduler_rule2", "check-detection-job")
 
-    logger.info(f"🔍 Checking detection job status for {cutoff_date}...")
+    logger.info(f"🔍 Checking detection job status for {cutoff_date} on {env}...")
 
     #  if check_detection_completion(cutoff_date):
     logger.info("✅ Detection job completed!")
-    data = fetch_data(cutoff_date)
+    data = fetch_data(cutoff_date, env)
     if not data:
         logger.error("⚠️ No data found for the final report.")
         return {"statusCode": 200, "body": "No data to send"}
