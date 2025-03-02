@@ -77,13 +77,16 @@ async def main():
             break  # No more images, exit loop
 
         # ✅ Filter out already processed keys
+        filtered_keys = [key for key in image_keys if "_tn_" in key]
+
+        # ✅ Step 2: Remove already processed keys
         processed_keys = await async_get_processed_keys_from_db(
             image_keys, args.cutoff_date
         )
         processed_keys = set(str(key) for key in processed_keys)
-        filtered_keys = [key for key in image_keys if "_tn_" in key]
+
         unprocessed_keys = (
-            [key for key in image_keys if key not in processed_keys]
+            [key for key in filtered_keys if key not in processed_keys]
             if processed_keys
             else filtered_keys
         )
