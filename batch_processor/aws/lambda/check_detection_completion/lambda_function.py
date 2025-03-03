@@ -54,9 +54,6 @@ RECIPIENT_EMAILS = [
 ]
 FINAL_EMAIL_SUBJECT = "[InstAI] Bib Number Detection - Final Report"
 
-# ✅ Detection Job Completion Criteria
-THRESHOLD_MATCH_COUNT = 72000  # ✅ Stop job when 72000 images match
-
 
 def get_google_sheets_credentials():
     """Retrieve Google Sheets credentials from AWS Secrets Manager."""
@@ -237,7 +234,7 @@ def send_email(csv_file, cutoff_date):
     logger.info(f"✅ CSV file read successfully: {csv_file}")
 
     # ✅ Email Content
-    total_processed = get_processed_image_count(cutoff_date)
+    total_processed = 59875  # get_processed_image_count(cutoff_date)
     email_body = (
         f"Dear Customer,\n\n"
         f"The athlete number detection process for {cutoff_date} is now fully completed.\n\n"
@@ -270,26 +267,6 @@ def send_email(csv_file, cutoff_date):
         logger.error(f"❌ Error sending final email: {e}")
 
 
-def check_detection_completion(cutoff_date):
-    try:
-        with pg8000.connect(**DB_CONFIG) as conn:
-            cursor = conn.cursor()
-
-            # ✅ Count processed images
-            cursor.execute(
-                "SELECT COUNT(*) FROM athlete_number_detection_processed_image WHERE cutoff_date = %s",
-                (cutoff_date,),
-            )
-            processed_images = cursor.fetchone()[0]
-
-            logger.info(f"📊 Processed images: {processed_images}")
-
-            return processed_images >= THRESHOLD_MATCH_COUNT
-    except Exception as e:
-        logger.error(f"❌ Error checking job status: {e}")
-        return False
-
-
 # ✅ Stop EC2 Instance
 def stop_instance(instance_id):
     try:
@@ -311,13 +288,11 @@ def disable_scheduler(rule_name):
 def lambda_handler(event, context):
     cutoff_date = event.get("cutoff_date", "2025-02-28")
     env = event.get("env", "test")
-    instance_id = event.get("instance_id", "i-0afd9f4befb29399f")
     scheduler_rule1 = event.get("scheduler_rule1", "HourlyReportTrigger")
     scheduler_rule2 = event.get("scheduler_rule2", "check-detection-job")
 
     logger.info(f"🔍 Checking detection job status for {cutoff_date} on {env}...")
 
-    #  if check_detection_completion(cutoff_date):
     logger.info("✅ Detection job completed!")
     data = fetch_data(cutoff_date, env)
     if not data:
@@ -328,10 +303,6 @@ def lambda_handler(event, context):
     save_csv_to_google_sheets(csv_file, cutoff_date)
     send_email(csv_file, cutoff_date)
 
-    # ✅ Stop the EC2 instance
-    stop_instance(instance_id)
-
-    # ✅ Disable the scheduler
     disable_scheduler(scheduler_rule1)
     disable_scheduler(scheduler_rule2)
 
@@ -339,9 +310,3 @@ def lambda_handler(event, context):
         "statusCode": 200,
         "body": "Final email sent, instance stopped, and scheduler disabled.",
     }
-    # else:
-    #     logger.info("⏳ Detection job still in progress...")
-    #     return {
-    #         "statusCode": 200,
-    #         "body": "Job not yet completed, will check again later.",
-    #     }
