@@ -18,7 +18,6 @@ def setup_logger(
             return not any(msg in record.getMessage() for msg in self.messages)
 
     logger = logging.getLogger(name)
-
     if os.getenv("LOG_LEVEL"):
         logger.setLevel(getattr(logging, os.getenv("LOG_LEVEL").upper(), logging.INFO))
     else:
