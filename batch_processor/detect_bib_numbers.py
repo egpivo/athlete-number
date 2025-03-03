@@ -1,157 +1,162 @@
 import argparse
+import asyncio
+import logging
 import os
-from io import BytesIO
 
-import boto3
-import pandas as pd
-import requests
-from dotenv import load_dotenv
+from src.config import DEST_BUCKET, DEST_FOLDER
+from src.db_handler import (
+    async_get_last_checkpoint,
+    async_get_processed_keys_from_db,
+    async_mark_keys_as_processed,
+    async_write_checkpoint_safely,
+)
+from src.ocr_handler import initialize_ocr, process_images_with_ocr
+from src.result_handler import save_results_to_postgres
+from src.s3_handler import batch_download_images, list_s3_images_incremental
+from tqdm import tqdm
 
-# Load environment variables
-load_dotenv()
+OCR_BATCH_SIZE = int(os.getenv("OCR_BATCH_SIZE", 10))
 
-# Parse command-line arguments
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 parser = argparse.ArgumentParser(description="Batch process images from S3")
 parser.add_argument(
-    "--max_images", type=int, default=50, help="Maximum number of images to process"
+    "--max_images",
+    type=int,
+    default=None,
+    help="Maximum number of images to process",
 )
 parser.add_argument(
-    "--batch_size", type=int, default=10, help="Number of images to process per batch"
+    "--batch_size",
+    type=int,
+    default=OCR_BATCH_SIZE,
+    help="Number of images to process per batch",
+)
+parser.add_argument(
+    "--cutoff_date",
+    type=str,
+    help="Processing date",
+)
+parser.add_argument(
+    "--env",
+    type=str,
+    default="test",
+    help="Environment",
+)
+parser.add_argument(
+    "--force_start",
+    action="store_true",
+    help="Force restart the process by resetting the last checkpoint.",
 )
 args = parser.parse_args()
 
-# AWS S3 Configurations
-AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
-AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
-DEST_BUCKET = os.getenv("DEST_BUCKET", "s3://athlete-number")
-DEST_FOLDER = os.getenv("DEST_FOLDER", "webdata-taipei-2025-02/images")
-BATCH_SIZE = args.batch_size
-MAX_IMAGES = args.max_images
 
-# API Configurations
-API_URL = os.getenv("BACKEND_URL", "http://localhost:5566") + "/extract/bib-numbers"
+async def main():
+    """Main pipeline for processing all images in batches."""
+    logger.info("🚀 Starting incremental image processing...")
 
-# Initialize S3 Client
-s3_client = boto3.client(
-    "s3",
-    aws_access_key_id=AWS_ACCESS_KEY,
-    aws_secret_access_key=AWS_SECRET_KEY,
-)
-
-
-def list_s3_images(bucket, prefix):
-    """List image files in the given S3 folder."""
-    bucket_name = bucket.replace("s3://", "")
-    response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-    all_images = [
-        obj["Key"]
-        for obj in response.get("Contents", [])
-        if obj["Key"].endswith((".jpg", ".jpeg", ".png"))
-    ]
-    return all_images[:MAX_IMAGES]
-
-
-def download_image(bucket, key):
-    """Download an image from S3 and return it as a file-like object."""
-    print(f"Downloading: {key}")
-    bucket_name = bucket.replace("s3://", "")
-    try:
-        response = s3_client.get_object(Bucket=bucket_name, Key=key)
-        return BytesIO(response["Body"].read()), key
-    except Exception as e:
-        print(f"Error downloading {key}: {e}")
-        return None, key
-
-
-def send_images_to_api(images):
-    """Send batch images to the API for processing and return detected bib numbers."""
-    files = [("files", (name, img.getvalue(), "image/jpeg")) for img, name in images]
-
-    print(f"Sending {len(files)} images to API...")
-
-    try:
-        response = requests.post(
-            API_URL, files=files, timeout=30
-        )  # Add timeout for stability
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.Timeout:
-        print("API request timed out!")
-        return []
-    except requests.exceptions.RequestException as e:
-        print(f"API request failed: {e}")
-        return []
-
-
-def process_results(results, processed_files):
-    """Convert API response to structured format for CSV saving.
-    Ensures every processed file is recorded, even if no numbers are detected.
-    """
-    rows = []
-    detected_files = {
-        result["filename"].split("/")[-1].split("_tn_")[0] for result in results
-    }
-
-    for result in results:
-        filename = result["filename"].split("/")[-1].split("_tn_")[0]
-        if result["athlete_numbers"]:
-            for tag in result["athlete_numbers"]:
-                rows.append([filename, tag])
-        else:
-            rows.append([filename, None])
-
-    # Ensure all processed files are included, even if API didn't return them
-    for filename in processed_files:
-        clean_filename = filename.split("/")[-1].split("_tn_")[0]
-        if clean_filename not in detected_files:
-            rows.append([clean_filename, None])
-
-    return rows
-
-
-def save_results_to_csv(results, processed_files, output_file="detection_results.csv"):
-    """Append detection results to a CSV file, ensuring all processed files are recorded."""
-    structured_results = process_results(results, processed_files)
-    df = pd.DataFrame(structured_results, columns=["photonum", "tag"])
-
-    # Append without overwriting
-    df.to_csv(
-        output_file, mode="a", index=False, header=not os.path.exists(output_file)
+    last_processed_key = (
+        None if args.force_start else await async_get_last_checkpoint(args.cutoff_date)
     )
+    if args.force_start:
+        logger.info("🚀 Force restart enabled. Starting from the beginning...")
+    else:
+        logger.info(f"🔄 Resuming from checkpoint: {last_processed_key or 'Beginning'}")
 
-    print(f"Results saved to {output_file}")
+    ocr_service = await initialize_ocr()
+    total_processed = 0
 
+    async for image_keys, next_start_after in list_s3_images_incremental(
+        DEST_BUCKET, f"{DEST_FOLDER}/{args.cutoff_date}", last_processed_key, 1000
+    ):
+        if not image_keys:
+            logger.info("✅ No new images left to process.")
+            break  # No more images, exit loop
 
-def main():
-    """Process images in batches."""
-    print("Fetching images from S3...")
-    image_keys = list_s3_images(DEST_BUCKET, DEST_FOLDER)
+        # ✅ Filter out already processed keys
+        filtered_keys = [key for key in image_keys if "_tn_" in key]
 
-    if not image_keys:
-        print("No images found in S3 bucket.")
-        return
+        # ✅ Step 2: Remove already processed keys
+        processed_keys = await async_get_processed_keys_from_db(
+            image_keys, args.cutoff_date
+        )
+        processed_keys = set(str(key) for key in processed_keys)
 
-    print(
-        f"Found {len(image_keys)} images (max {MAX_IMAGES}). Processing in batches of {BATCH_SIZE}..."
-    )
+        unprocessed_keys = (
+            [key for key in filtered_keys if key not in processed_keys]
+            if processed_keys
+            else filtered_keys
+        )
 
-    # Process in batches
-    for i in range(0, len(image_keys), BATCH_SIZE):
-        batch_keys = image_keys[i : i + BATCH_SIZE]
+        if args.max_images:
+            remaining = args.max_images - total_processed
+            if remaining <= 0:
+                logger.info("✅ Reached max images limit. Stopping.")
+                break
+            unprocessed_keys = unprocessed_keys[:remaining]
 
-        print(f"\nProcessing batch {i // BATCH_SIZE + 1}...")
-        images = [download_image(DEST_BUCKET, key) for key in batch_keys]
-        images = [img for img in images if img[0] is not None]
+        if not unprocessed_keys:
+            logger.info(
+                "✅ All new images in this batch are already processed. Updating checkpoint."
+            )
+            await async_write_checkpoint_safely(next_start_after, args.cutoff_date)
+            continue  # Move to next batch
 
-        if not images:
-            print("Skipping batch due to failed downloads.")
-            continue
+        logger.info(
+            f"📸 Processing {len(unprocessed_keys)} new images in batches of {args.batch_size}..."
+        )
+        total_batches = (len(unprocessed_keys) + args.batch_size - 1) // args.batch_size
 
-        detection_results = send_images_to_api(images)
-        save_results_to_csv(detection_results, batch_keys)
+        with tqdm(
+            total=len(unprocessed_keys), desc="Processing Images", unit="img"
+        ) as pbar:
+            for batch_idx in range(total_batches):
+                start = batch_idx * args.batch_size
+                end = min((batch_idx + 1) * args.batch_size, len(unprocessed_keys))
+                batch_keys = unprocessed_keys[start:end]
 
-    print("\n✅ Processing complete!")
+                # ✅ Download images concurrently (non-blocking)
+                images = await batch_download_images(batch_keys)
+                if not images:
+                    logger.warning(
+                        f"⚠️ Skipping batch {batch_idx + 1}/{total_batches} due to download errors."
+                    )
+                    continue
+
+                # ✅ Process images asynchronously
+                detection_results = await process_images_with_ocr(ocr_service, images)
+                await asyncio.to_thread(
+                    save_results_to_postgres,
+                    detection_results,
+                    args.cutoff_date,
+                    args.env,
+                )
+
+                # ✅ Mark keys as processed & update checkpoint asynchronously
+                await async_mark_keys_as_processed(
+                    batch_keys, args.cutoff_date, args.env
+                )
+                await async_write_checkpoint_safely(batch_keys[-1], args.cutoff_date)
+                total_processed += len(batch_keys)
+                pbar.update(len(batch_keys))
+                logger.info(
+                    f"✅ Processed {pbar.n}/{len(unprocessed_keys)} images. Checkpoint: {batch_keys[-1]}"
+                )
+            if args.max_images is not None and total_processed >= args.max_images:
+                logger.info(
+                    f"🚫 Stopping early: Processed {total_processed} images (max {args.max_images})"
+                )
+                break
+        if args.max_images is not None and total_processed >= args.max_images:
+            logger.info(
+                f"🚫 Stopping early: Processed {total_processed} images (max {args.max_images})"
+            )
+            break
+    logger.info("🎉✅ Incremental processing complete!")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

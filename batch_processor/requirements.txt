@@ -1,4 +1,6 @@
-boto3==1.34.41
 requests==2.31.0
 python-dotenv==1.0.1
 pandas==2.2.0
+tqdm==4.66.1
+psycopg2-binary==2.9.10
+aiobotocore==2.20.0

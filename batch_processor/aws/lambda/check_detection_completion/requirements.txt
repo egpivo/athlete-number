@@ -1,0 +1,12 @@
+# Core dependencies
+requests==2.31.0
+python-dotenv==1.0.1
+pg8000==1.31.2
+boto3==1.37.3
+
+# Google Sheets API dependencies
+google-auth==2.27.0
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+google-api-python-client==2.127.0
+oauth2client==3.0.0

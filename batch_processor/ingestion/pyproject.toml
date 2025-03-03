@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "s3-log-monitoring"
+version = "0.1.0"
+description = "Monitor S3 sync logs and insert filenames into PostgreSQL"
+authors = ["Your Name <your@email.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+psycopg2-binary = "^2.9.10"
+python-dotenv = "^1.0.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

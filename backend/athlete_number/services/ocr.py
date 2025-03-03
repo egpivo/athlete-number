@@ -4,10 +4,15 @@ from typing import List
 
 import torch
 from athlete_number.utils.logger import setup_logger
+from dotenv import load_dotenv
 from PIL import Image
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
+load_dotenv()
+
 LOGGER = setup_logger(__name__)
+
+BIB_NUM_LENGTH = int(os.getenv("BIB_NUM_LENGTH", 5))
 
 
 class OCRService:
@@ -85,6 +90,9 @@ class OCRService:
             return [[] for _ in images]
 
     @staticmethod
-    def extract_main_number(text: str) -> str:
+    def extract_main_number(text: str, num_length: int = BIB_NUM_LENGTH) -> str:
         digit_groups = re.findall(r"\d+", text)
-        return max(digit_groups, key=len) if digit_groups else ""
+        filtered_numbers = [
+            num for num in digit_groups if num_length and len(num) == num_length
+        ]
+        return max(filtered_numbers, key=len) if filtered_numbers else ""

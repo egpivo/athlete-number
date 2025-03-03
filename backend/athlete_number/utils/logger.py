@@ -5,7 +5,7 @@ from typing import List, Optional
 
 def setup_logger(
     name: Optional[str] = None,
-    level: int = logging.DEBUG,
+    level: int = logging.INFO,
     filter_messages: Optional[List[str]] = None,
     log_to_file: bool = False,
     log_filename: str = "application.log",
@@ -18,7 +18,6 @@ def setup_logger(
             return not any(msg in record.getMessage() for msg in self.messages)
 
     logger = logging.getLogger(name)
-
     if os.getenv("LOG_LEVEL"):
         logger.setLevel(getattr(logging, os.getenv("LOG_LEVEL").upper(), logging.INFO))
     else:
