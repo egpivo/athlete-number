@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_processed_keys_from_db(image_keys: list, cutoff_date: str) -> set:
+def get_processed_keys_from_db(image_keys: list, cutoff_date: str, env: str) -> set:
     """Retrieve keys already processed from the database."""
     processed = set()
     if not image_keys:
@@ -33,7 +33,7 @@ def get_processed_keys_from_db(image_keys: list, cutoff_date: str) -> set:
             for i in range(0, len(image_keys), chunk_size):
                 chunk = image_keys[i : i + chunk_size]
                 placeholders = ",".join(["%s"] * len(chunk))
-                query = f"SELECT image_key FROM {PROCESSED_KEY_TABLE} WHERE image_key IN ({placeholders}) AND cutoff_date = '{cutoff_date}'"
+                query = f"SELECT image_key FROM {PROCESSED_KEY_TABLE} WHERE image_key IN ({placeholders}) AND cutoff_date = '{cutoff_date}' AND env = '{env}'"
                 cur.execute(query, chunk)
                 processed.update(row[0] for row in cur.fetchall())
         conn.close()
@@ -102,8 +102,10 @@ async def async_get_last_checkpoint(cutoff_date):
     return await asyncio.to_thread(get_last_checkpoint, cutoff_date)
 
 
-async def async_get_processed_keys_from_db(image_keys, cutoff_date):
-    return await asyncio.to_thread(get_processed_keys_from_db, image_keys, cutoff_date)
+async def async_get_processed_keys_from_db(image_keys, cutoff_date, env):
+    return await asyncio.to_thread(
+        get_processed_keys_from_db, image_keys, cutoff_date, env
+    )
 
 
 async def async_mark_keys_as_processed(image_keys, cutoff_date, env):

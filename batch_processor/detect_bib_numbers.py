@@ -81,7 +81,7 @@ async def main():
 
         # ✅ Step 2: Remove already processed keys
         processed_keys = await async_get_processed_keys_from_db(
-            image_keys, args.cutoff_date
+            image_keys, args.cutoff_date, args.env
         )
         processed_keys = set(str(key) for key in processed_keys)
 
