@@ -51,14 +51,14 @@ class DigitDetector:
     def device_type(self) -> str:
         return "gpu" if torch.cuda.is_available() else "cpu"
 
-    async def detect_async(self, image_files: List[str]) -> List[List[Dict]]:
+    async def detect_async(self, images: List[np.ndarray]) -> List[List[Dict]]:
         """Run detection asynchronously."""
-        return await asyncio.to_thread(self.detect, image_files)
+        return await asyncio.to_thread(self.detect, images)
 
-    def detect(self, image_files: List[str]) -> List[List[Dict]]:
+    def detect(self, images: List[np.ndarray]) -> List[List[Dict]]:
         try:
             results = self.model(
-                image_files,
+                images,
                 imgsz=self.image_size,
                 conf=self.conf,
                 iou=self.iou,
@@ -66,19 +66,15 @@ class DigitDetector:
                 augment=True,
             )
             return [
-                self._format_results(result, image_files[idx])
+                self._format_results(result, images[idx])
                 for idx, result in enumerate(results)
             ]
         except Exception as e:
             LOGGER.error(f"Inference failed: {e}")
             raise RuntimeError("Detection failed")
 
-    def _format_results(self, result, filename: str) -> List[Dict]:
+    def _format_results(self, result, orig_img) -> List[Dict]:
         detections = []
-        orig_img = (
-            result.orig_img if hasattr(result, "orig_img") else cv2.imread(filename)
-        )
-
         dets = result.boxes
         boxes_conf = list(zip(dets.xyxy.tolist(), dets.conf.tolist()))
         boxes_conf.sort(key=lambda x: x[1], reverse=True)
@@ -93,7 +89,6 @@ class DigitDetector:
             # Store the detection info
             detections.append(
                 {
-                    "filename": filename,
                     "bbox": bbox_xyxy,
                     "confidence": float(conf_score),
                     "image": processed_rgb,
