@@ -5,7 +5,6 @@ import aiobotocore
 import boto3
 import cv2
 import numpy as np
-from PIL import Image
 from src.config import AWS_ACCESS_KEY, AWS_SECRET_KEY, DEST_BUCKET
 
 logger = logging.getLogger(__name__)
@@ -86,7 +85,7 @@ async def download_image(bucket: str, key: str):
             logger.warning(f"Failed to decode image {key}. Skipping.")
             return None, key
 
-        return Image.fromarray(image), key
+        return image, key
     except Exception as e:
         logger.error(f"Error downloading {key}: {e}")
         return None, key
