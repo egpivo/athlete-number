@@ -1,14 +1,26 @@
 import asyncio
 from typing import Dict, List
 
+import cv2
+import numpy as np
 import torch
 from athlete_number.core.configs import YOLO_PATH
 from athlete_number.services.utils import ModelPathResolver
 from athlete_number.utils.logger import setup_logger
-from PIL import Image
 from ultralytics import YOLO
 
 LOGGER = setup_logger(__name__)
+
+
+def resize_image_with_width(image: np.ndarray, target_width: int) -> np.ndarray:
+    """Resize an image while maintaining aspect ratio using OpenCV."""
+    if image is None or image.size == 0:
+        raise ValueError("Invalid image for processing.")
+
+    h, w = image.shape[:2]
+    scale = target_width / w
+    new_size = (target_width, int(h * scale))
+    return cv2.resize(image, new_size)
 
 
 class DigitDetector:
@@ -39,40 +51,56 @@ class DigitDetector:
     def device_type(self) -> str:
         return "gpu" if torch.cuda.is_available() else "cpu"
 
-    async def detect_async(self, image: List[Image.Image]) -> List[List[Dict]]:
+    async def detect_async(self, image_files: List[str]) -> List[List[Dict]]:
         """Run detection asynchronously."""
-        return await asyncio.to_thread(self.detect, image)
+        return await asyncio.to_thread(self.detect, image_files)
 
-    def detect(self, images: List[Image.Image]) -> List[List[Dict]]:
+    def detect(self, image_files: List[str]) -> List[List[Dict]]:
         try:
             results = self.model(
-                images,
+                image_files,
                 imgsz=self.image_size,
                 conf=self.conf,
                 iou=self.iou,
                 max_det=self.max_det,
                 augment=True,
             )
-            return [self._format_results(result) for result in results]
+            return [
+                self._format_results(result, image_files[idx])
+                for idx, result in enumerate(results)
+            ]
         except Exception as e:
             LOGGER.error(f"Inference failed: {e}")
             raise RuntimeError("Detection failed")
 
-    def _format_results(self, results) -> List[Dict]:
+    def _format_results(self, result, filename: str) -> List[Dict]:
         detections = []
-        for result in results:
-            for box in result.boxes:
-                xyxy = [
-                    float(coord) for sublist in box.xyxy.tolist() for coord in sublist
-                ]
-                detections.append(
-                    {
-                        "class_id": int(box.cls.item()),
-                        "confidence": float(box.conf.item()),
-                        "bbox": xyxy,
-                    }
-                )
-        return sorted(detections, key=lambda x: x["bbox"][0])
+        orig_img = (
+            result.orig_img if hasattr(result, "orig_img") else cv2.imread(filename)
+        )
+
+        dets = result.boxes
+        boxes_conf = list(zip(dets.xyxy.tolist(), dets.conf.tolist()))
+        boxes_conf.sort(key=lambda x: x[1], reverse=True)
+
+        for bbox_xyxy, conf_score in boxes_conf:
+            x1, y1, x2, y2 = map(int, bbox_xyxy)
+            cropped_img = orig_img[y1:y2, x1:x2]
+
+            # Resize cropped image
+            processed_rgb = resize_image_with_width(cropped_img, 1024)
+
+            # Store the detection info
+            detections.append(
+                {
+                    "filename": filename,
+                    "bbox": bbox_xyxy,
+                    "confidence": float(conf_score),
+                    "image": processed_rgb,
+                }
+            )
+
+        return detections
 
 
 class DetectionService:

@@ -4,9 +4,7 @@ import os
 import numpy as np
 import torch
 import uvicorn
-from athlete_number.routers.detect_bib_numbers import router as detect_router
 from athlete_number.routers.extract_bib_numbers import router as athlete_router
-from athlete_number.routers.extract_numbers import router as extract_router
 from athlete_number.services.detection import DetectionService
 from athlete_number.services.ocr import OCRService
 from athlete_number.utils.logger import setup_logger
@@ -26,8 +24,6 @@ async def read_main():
     return {"message": "Welcome!"}
 
 
-app.include_router(extract_router)
-app.include_router(detect_router)
 app.include_router(athlete_router)
 
 

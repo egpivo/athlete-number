@@ -8,7 +8,6 @@ from athlete_number.services.detection import DetectionService
 from athlete_number.services.detection_orchestrator import DetectionOCRService
 from athlete_number.utils.logger import setup_logger
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from PIL import Image
 
 LOGGER = setup_logger(__name__)
 router = APIRouter(prefix="/extract", tags=["Athlete Number Extraction"])
@@ -49,14 +48,14 @@ async def extract_athlete_numbers(
     )
 
     # Load images into memory
-    images = [Image.open(file.file).convert("RGB") for file in files]
+    # images = [Image.open(file.file).convert("RGB") for file in files]
     filenames = [file.filename for file in files]
 
     responses = []
 
     # Process in Batches
-    for i in range(0, len(images), BATCH_SIZE):
-        batch_images = images[i : i + BATCH_SIZE]
+    for i in range(0, len(filenames), BATCH_SIZE):
+        # batch_images = images[i : i + BATCH_SIZE]
         batch_filenames = filenames[i : i + BATCH_SIZE]
 
         if torch.cuda.is_available():
@@ -66,23 +65,23 @@ async def extract_athlete_numbers(
             start_time = asyncio.get_event_loop().time()
 
             # Run Detection & OCR in batch
-            detections_batch = await asyncio.to_thread(
-                detection_service.detector.detect, batch_images
-            )
-            extracted_numbers_batch = await orchestrator.process_images(batch_images)
+            # detections_batch = await asyncio.to_thread(
+            #     detection_service.detector.detect, batch_filenames
+            # )
+            extracted_numbers_batch = await orchestrator.process_images(batch_filenames)
             processing_time = round(asyncio.get_event_loop().time() - start_time, 4)
 
-            for filename, detections, extracted_numbers in zip(
-                batch_filenames, detections_batch, extracted_numbers_batch
+            for filename, extracted_numbers in zip(
+                batch_filenames, extracted_numbers_batch
             ):
                 response_data = {
                     "filename": filename,
                     "athlete_numbers": extracted_numbers,
-                    "yolo_detections": detections,
-                    "processing_time": processing_time / len(batch_images),
+                    "yolo_detections": orchestrator.detection_service.detections,
+                    "processing_time": processing_time / len(batch_filenames),
                     "confidence": orchestrator.last_confidence_scores,
                     "model_versions": {
-                        "detection": detection_service.detector.model_version,
+                        "detection": orchestrator.detection_service.detector.model_version,
                         "ocr": "GOT-OCR-2.0",
                     },
                 }
