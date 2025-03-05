@@ -23,14 +23,17 @@ TABLE_NAME = "allsports_bib_number_detection"
 
 def process_results(results):
     """Convert OCR results into structured format."""
-    rows = []
+    unique_rows = set()
+
     for result in results:
         eid, cid, photonum = result.filename.split("/")[-1].split("_")[:3]
+
         if result.extracted_number:
             for tag in result.extracted_number:
                 if re.fullmatch(r"\d{5}", tag):
-                    rows.append((eid, cid, photonum, tag))
-    return rows
+                    unique_rows.add((eid, cid, photonum, tag))
+
+    return list(unique_rows)
 
 
 def save_results_to_postgres(results, cutoff_date, env):
