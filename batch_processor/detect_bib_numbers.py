@@ -103,7 +103,7 @@ async def main():
                 "✅ All new images in this batch are already processed. Updating checkpoint."
             )
             await async_write_checkpoint_safely(next_start_after, args.cutoff_date)
-            continue  # Move to next batch
+            continue
 
         logger.info(
             f"📸 Processing {len(unprocessed_keys)} new images in batches of {args.batch_size}..."
@@ -126,7 +126,7 @@ async def main():
                     )
                     continue
 
-                # ✅ Process images asynchronously
+                # Process images asynchronously
                 detection_results = await process_images_with_ocr(ocr_service, images)
                 await asyncio.to_thread(
                     save_results_to_postgres,
@@ -135,7 +135,7 @@ async def main():
                     args.env,
                 )
 
-                # ✅ Mark keys as processed & update checkpoint asynchronously
+                # Mark keys as processed & update checkpoint asynchronously
                 await async_mark_keys_as_processed(
                     batch_keys, args.cutoff_date, args.env
                 )
@@ -143,16 +143,16 @@ async def main():
                 total_processed += len(batch_keys)
                 pbar.update(len(batch_keys))
                 logger.info(
-                    f"✅ Processed {pbar.n}/{len(unprocessed_keys)} images. Checkpoint: {batch_keys[-1]}"
+                    f"Processed {pbar.n}/{len(unprocessed_keys)} images. Checkpoint: {batch_keys[-1]}"
                 )
             if args.max_images is not None and total_processed >= args.max_images:
                 logger.info(
-                    f"🚫 Stopping early: Processed {total_processed} images (max {args.max_images})"
+                    f"Stopping early: Processed {total_processed} images (max {args.max_images})"
                 )
                 break
         if args.max_images is not None and total_processed >= args.max_images:
             logger.info(
-                f"🚫 Stopping early: Processed {total_processed} images (max {args.max_images})"
+                f"Stopping early: Processed {total_processed} images (max {args.max_images})"
             )
             break
     logger.info("🎉✅ Incremental processing complete!")

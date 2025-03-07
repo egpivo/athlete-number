@@ -1,26 +1,14 @@
 import asyncio
 from typing import Dict, List
 
-import cv2
 import numpy as np
 import torch
 from athlete_number.core.configs import YOLO_PATH
-from athlete_number.services.utils import ModelPathResolver
+from athlete_number.services.utils import ModelPathResolver, resize_image_with_width
 from athlete_number.utils.logger import setup_logger
 from ultralytics import YOLO
 
 LOGGER = setup_logger(__name__)
-
-
-def resize_image_with_width(image: np.ndarray, target_width: int) -> np.ndarray:
-    """Resize an image while maintaining aspect ratio using OpenCV."""
-    if image is None or image.size == 0:
-        raise ValueError("Invalid image for processing.")
-
-    h, w = image.shape[:2]
-    scale = target_width / w
-    new_size = (target_width, int(h * scale))
-    return cv2.resize(image, new_size)
 
 
 class DigitDetector:
@@ -83,10 +71,7 @@ class DigitDetector:
             x1, y1, x2, y2 = map(int, bbox_xyxy)
             cropped_img = orig_img[y1:y2, x1:x2]
 
-            # Resize cropped image
-            processed_rgb = resize_image_with_width(cropped_img, 1024)
-
-            # Store the detection info
+            processed_rgb = resize_image_with_width(cropped_img)
             detections.append(
                 {
                     "bbox": bbox_xyxy,
@@ -120,7 +105,7 @@ class DetectionService:
             try:
                 model_path = ModelPathResolver(YOLO_PATH).get_model_path()
                 self.detector = DigitDetector(model_path)
-                LOGGER.info("✅ Model initialized successfully.")
+                LOGGER.info("Model initialized successfully.")
             except Exception as e:
-                LOGGER.critical(f"❌ Model initialization failed: {e}")
+                LOGGER.critical(f"Model initialization failed: {e}")
                 raise RuntimeError("Model initialization failed")

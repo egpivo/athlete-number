@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import cv2
+import numpy as np
 from athlete_number.utils.logger import setup_logger
 
 LOGGER = setup_logger(__name__)
@@ -29,3 +31,14 @@ def is_valid_bbox(bbox):
     )
 
     return True
+
+
+def resize_image_with_width(image: np.ndarray, target_width: int = 1024) -> np.ndarray:
+    """Resize an image while maintaining aspect ratio using OpenCV."""
+    if image is None or image.size == 0:
+        raise ValueError("Invalid image for processing.")
+
+    h, w = image.shape[:2]
+    scale = target_width / w
+    new_size = (target_width, int(h * scale))
+    return cv2.resize(image, new_size)

@@ -6,7 +6,6 @@ import cv2
 import numpy as np
 import torch
 from athlete_number.core.schemas import AthleteNumberResponse
-from athlete_number.services.detection import DetectionService
 from athlete_number.services.detection_orchestrator import DetectionOCRService
 from athlete_number.utils.logger import setup_logger
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -40,7 +39,6 @@ def load_image_from_upload(file: UploadFile) -> np.ndarray:
 async def extract_athlete_numbers(
     files: List[UploadFile] = File(...),
     orchestrator: DetectionOCRService = Depends(DetectionOCRService.get_instance),
-    detection_service: DetectionService = Depends(DetectionService.get_instance),
 ) -> List[AthleteNumberResponse]:
     """
     ### **Batch Athlete Number Extraction API**

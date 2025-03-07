@@ -39,7 +39,7 @@ class DetectionOCRService:
 
             self.detection_service = await DetectionService.get_instance()
             self.ocr_service = await OCRService.get_instance()
-            LOGGER.info("✅ DetectionOCRService initialized.")
+            LOGGER.info("DetectionOCRService initialized.")
 
     async def process_images(self, images: List[np.ndarray]) -> List[List[str]]:
         start_time = time.time()
