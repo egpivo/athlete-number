@@ -18,6 +18,8 @@ class DetectionOCRService:
         self.detection_service = None
         self.ocr_service = None
         self.lock = asyncio.Lock()
+        self.yolo_gpus = yolo_gpus
+        self.ocr_gpus = ocr_gpus
 
         self.last_ocr_results = []
         self.last_confidence_scores = []
