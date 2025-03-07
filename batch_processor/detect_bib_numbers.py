@@ -74,12 +74,9 @@ async def main():
     ):
         if not image_keys:
             logger.info("✅ No new images left to process.")
-            break  # No more images, exit loop
+            break
 
-        # ✅ Filter out already processed keys
         filtered_keys = [key for key in image_keys if "_tn_" in key]
-
-        # ✅ Step 2: Remove already processed keys
         processed_keys = await async_get_processed_keys_from_db(
             image_keys, args.cutoff_date, args.env
         )
@@ -155,7 +152,7 @@ async def main():
                 f"Stopping early: Processed {total_processed} images (max {args.max_images})"
             )
             break
-    logger.info("🎉✅ Incremental processing complete!")
+    logger.info("Incremental processing complete!")
 
 
 if __name__ == "__main__":

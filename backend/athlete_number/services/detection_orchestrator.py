@@ -9,8 +9,6 @@ from PIL import Image
 
 LOGGER = setup_logger(__name__)
 
-RESIZE_WIDTH = 1024
-
 
 class DetectionOCRService:
     _instance = None
