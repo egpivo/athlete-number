@@ -30,6 +30,10 @@ class OCRService:
         self.model = AutoModelForImageTextToText.from_pretrained(self._model).to(
             self.device
         )
+        if torch.cuda.device_count() > 1:
+            LOGGER.info(f"🔹 Using {torch.cuda.device_count()} GPUs for inference")
+            self.model = torch.nn.DataParallel(self.model)
+
         self.processor = AutoProcessor.from_pretrained(self._model)
 
         # Read batch size from environment variable, default = 4
@@ -60,9 +64,9 @@ class OCRService:
                 inputs = self.processor(images=batch_images, return_tensors="pt").to(
                     self.device
                 )
-
+                model_instance = getattr(self.model, "module", self.model)
                 with torch.no_grad():
-                    generated_ids = self.model.generate(
+                    generated_ids = model_instance.generate(
                         **inputs,
                         do_sample=False,
                         tokenizer=self.processor.tokenizer,

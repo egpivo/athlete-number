@@ -29,6 +29,10 @@ class DigitDetector:
         self.image_size = image_size
 
         self.model = YOLO(model_path).to(self.device)
+        if torch.cuda.device_count() > 1:
+            LOGGER.info(f"🔹 Using {torch.cuda.device_count()} GPUs for inference")
+            self.model = torch.nn.DataParallel(self.model)
+
         self._metadata = {"version": "1.0.0"}
 
     @property
@@ -45,7 +49,8 @@ class DigitDetector:
 
     def detect(self, images: List[np.ndarray]) -> List[List[Dict]]:
         try:
-            results = self.model(
+            model_instance = getattr(self.model, "module", self.model)
+            results = model_instance(
                 images,
                 imgsz=self.image_size,
                 conf=self.conf,
