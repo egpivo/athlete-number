@@ -14,7 +14,7 @@ class DetectionOCRService:
     _instance = None
     _debug_path = "debug_crops"
 
-    def __init__(self):
+    def __init__(self, yolo_gpus=[0, 1], ocr_gpus=[2, 3]):
         self.detection_service = None
         self.ocr_service = None
         self.lock = asyncio.Lock()
@@ -23,10 +23,10 @@ class DetectionOCRService:
         self.last_confidence_scores = []
 
     @classmethod
-    async def get_instance(cls):
+    async def get_instance(cls, yolo_gpus=[0, 1], ocr_gpus=[2, 3]):
         """Singleton pattern for the orchestrator service."""
         if cls._instance is None:
-            cls._instance = DetectionOCRService()
+            cls._instance = DetectionOCRService(yolo_gpus, ocr_gpus)
             await cls._instance.initialize()
         return cls._instance
 
@@ -35,9 +35,11 @@ class DetectionOCRService:
         async with self.lock:
             from athlete_number.services.detection import DetectionService
 
-            self.detection_service = await DetectionService.get_instance()
-            self.ocr_service = await OCRService.get_instance()
-            LOGGER.info("DetectionOCRService initialized.")
+            self.detection_service = await DetectionService.get_instance(
+                gpu_ids=self.yolo_gpus
+            )
+            self.ocr_service = await OCRService.get_instance(gpu_ids=self.ocr_gpus)
+            LOGGER.info(f"✅ YOLO on GPUs {self.yolo_gpus}, OCR on GPUs {self.ocr_gpus}")
 
     async def process_images(self, images: List[np.ndarray]) -> List[List[str]]:
         start_time = time.time()

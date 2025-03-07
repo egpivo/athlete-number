@@ -19,8 +19,9 @@ class OCRService:
     _instance = None
     _model = "stepfun-ai/GOT-OCR-2.0-hf"
 
-    def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+    def __init__(self, gpu_ids=[2, 3]):  # Assign OCR to GPUs 2 & 3
+        self.device = f"cuda:{gpu_ids[0]}" if torch.cuda.is_available() else "cpu"
+        self.gpu_ids = gpu_ids
 
         if OCRService._instance is not None:
             raise RuntimeError(
@@ -31,20 +32,19 @@ class OCRService:
             self.device
         )
         if torch.cuda.device_count() > 1:
-            LOGGER.info(f"🔹 Using {torch.cuda.device_count()} GPUs for inference")
-            self.model = torch.nn.DataParallel(self.model)
+            LOGGER.info(f"🔹 Using GPUs {gpu_ids} for OCR inference")
+            self.model = torch.nn.DataParallel(self.model, device_ids=gpu_ids)
 
         self.processor = AutoProcessor.from_pretrained(self._model)
 
         # Read batch size from environment variable, default = 4
-        self.batch_size = int(os.getenv("OCR_BATCH_SIZE", 4))
+        self.batch_size = int(os.getenv("OCR_BATCH_SIZE", 8))
         LOGGER.info(f"🔹 OCR batch size set to {self.batch_size}")
 
     @classmethod
-    async def get_instance(cls):
-        """Singleton pattern for OCR service."""
+    async def get_instance(cls, gpu_ids=[2, 3]):  # Assign GPUs dynamically
         if cls._instance is None:
-            cls._instance = OCRService()
+            cls._instance = OCRService(gpu_ids=gpu_ids)
         return cls._instance
 
     def extract_numbers_from_images(self, images: List[Image.Image]) -> List[List[str]]:

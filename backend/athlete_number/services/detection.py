@@ -19,9 +19,11 @@ class DigitDetector:
         iou: float = 0.5,
         max_det: int = 100,
         image_size: int = 1280,
+        gpu_ids=[0, 1],
     ):
         self.model_path = model_path
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = f"cuda:{gpu_ids[0]}" if torch.cuda.is_available() else "cpu"
+        self.gpu_ids = gpu_ids  # Store assigned GPUs
 
         self.conf = conf
         self.iou = iou
@@ -30,8 +32,8 @@ class DigitDetector:
 
         self.model = YOLO(model_path).to(self.device)
         if torch.cuda.device_count() > 1:
-            LOGGER.info(f"🔹 Using {torch.cuda.device_count()} GPUs for inference")
-            self.model = torch.nn.DataParallel(self.model)
+            LOGGER.info(f"🔹 Using GPUs {gpu_ids} for YOLO inference")
+            self.model = torch.nn.DataParallel(self.model, device_ids=gpu_ids)
 
         self._metadata = {"version": "1.0.0"}
 
