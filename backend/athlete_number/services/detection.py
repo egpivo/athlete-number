@@ -3,6 +3,7 @@ from typing import Dict, List
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from athlete_number.core.configs import YOLO_PATH
 from athlete_number.services.utils import ModelPathResolver, resize_image_with_width
 from athlete_number.utils.logger import setup_logger
@@ -33,8 +34,10 @@ class DigitDetector:
         self.model = YOLO(model_path).to(self.device)
         if torch.cuda.device_count() > 1:
             LOGGER.info(f"🔹 Using GPUs {gpu_ids} for YOLO inference")
-            self.model = torch.nn.DataParallel(self.model, device_ids=gpu_ids)
-
+            dist.init_process_group(backend="nccl", init_method="env://")
+            self.model = torch.nn.parallel.DistributedDataParallel(
+                self.model, device_ids=gpu_ids
+            )
         self._metadata = {"version": "1.0.0"}
 
     @property

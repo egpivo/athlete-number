@@ -33,7 +33,7 @@ class DetectionOCRService:
         return cls._instance
 
     async def initialize(self):
-        """Initialize detection and OCR services."""
+        """Initialize YOLO and OCR services with multi-GPU support."""
         async with self.lock:
             from athlete_number.services.detection import DetectionService
 
@@ -46,10 +46,15 @@ class DetectionOCRService:
     async def process_images(self, images: List[np.ndarray]) -> List[List[str]]:
         start_time = time.time()
 
-        detections_batch = await self.detection_service.detector.detect_async(images)
+        detections_task = asyncio.create_task(
+            self.detection_service.detector.detect_async(images)
+        )
+        detections_batch = await detections_task  # Wait for YOLO to finish
+
         if not detections_batch:
             LOGGER.warning("⚠ No bib numbers detected in any image.")
             return [[] for _ in images]
+
         pil_images = [
             [Image.fromarray(det["image"]) for det in detection]
             for detection in detections_batch
