@@ -93,14 +93,15 @@ class DigitDetector:
 class DetectionService:
     _instance = None
 
-    def __init__(self):
+    def __init__(self, gpu_ids=[0, 1]):
         self.detector = None
         self.lock = asyncio.Lock()
+        self.gpu_ids = gpu_ids
 
     @classmethod
-    async def get_instance(cls):
+    async def get_instance(cls, gpu_ids=[0, 1]):
         if cls._instance is None:
-            cls._instance = DetectionService()
+            cls._instance = DetectionService(gpu_ids=gpu_ids)
             await cls._instance.initialize()
         return cls._instance
 
