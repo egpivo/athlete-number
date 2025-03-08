@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 
 import aiobotocore
 import boto3
@@ -91,11 +92,22 @@ async def download_image(bucket: str, key: str):
         return None, key
 
 
-async def batch_download_images(image_keys: list):
-    """Download multiple images asynchronously."""
-    tasks = [download_image(DEST_BUCKET, key) for key in image_keys]
+async def batch_download_images(image_keys: list, local_dir: str):
+    """Download images asynchronously and save to local_dir."""
+    os.makedirs(local_dir, exist_ok=True)
+
+    async def download_and_save(key):
+        image_bytes, key = await download_image(DEST_BUCKET, key)
+        if image_bytes:
+            local_path = os.path.join(local_dir, os.path.basename(key))
+            with open(local_path, "wb") as f:
+                f.write(image_bytes)
+            return key, local_path
+        return None
+
+    tasks = [download_and_save(key) for key in image_keys]
     results = await asyncio.gather(*tasks)
-    return [(img, key) for img, key in results if img is not None]
+    return [(key, path) for path, key in results if path]
 
 
 async def read_checkpoint(bucket: str, key: str) -> str:

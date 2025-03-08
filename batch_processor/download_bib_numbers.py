@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import os
 
 from src.config import DEST_BUCKET, DEST_FOLDER
 from src.s3_handler import batch_download_images, list_s3_images_incremental
@@ -21,11 +22,13 @@ def parse_args():
     parser.add_argument("--env", default="test", help="Environment (test/production)")
     parser.add_argument("--page_size", type=int, default=1000)
     parser.add_argument("--force_start", action="store_true")
+    parser.add_argument("--local_dir", default="./local_images")
     return parser.parse_args()
 
 
 async def main(args):
     init_sqlite_db()
+    os.makedirs(args.local_dir, exist_ok=True)
 
     last_processed_key = None
     if not args.force_start:
