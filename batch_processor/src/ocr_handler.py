@@ -7,17 +7,17 @@ async def initialize_ocr():
     return await DetectionOCRService.get_instance()
 
 
-async def process_images_with_ocr(ocr_service, images: list):
+async def process_images_with_ocr(ocr_service, images: list, filenames: list):
     """Detect bib numbers using YOLO, then extract numbers using OCR."""
     extracted_numbers_list = await ocr_service.process_images(images)
 
     results = [
         NumberExtractionResponse(
-            filename=image,
+            filename=filename,
             extracted_number=extracted_numbers_list[i]
             if isinstance(extracted_numbers_list[i], list)
             else [extracted_numbers_list[i]],
         )
-        for i, image in enumerate(images)
+        for i, filename in enumerate(filenames)
     ]
     return results

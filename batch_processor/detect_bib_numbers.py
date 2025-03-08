@@ -64,7 +64,9 @@ async def main(args):
         batch = rows_to_process[: args.batch_size]
         image_keys, local_paths = zip(*batch)
         image_list = [cv2.imread(path) for path in local_paths]
-        detection_results = await process_images_with_ocr(ocr_service, image_list)
+        detection_results = await process_images_with_ocr(
+            ocr_service, image_list, image_keys
+        )
 
         # Save results asynchronously
         await asyncio.to_thread(
