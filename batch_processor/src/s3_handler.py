@@ -96,13 +96,14 @@ async def download_image(bucket: str, key: str):
 
 
 async def batch_download_images(image_keys: list, local_dir: str):
-    """Download images and return [(key, local_path), ...]"""
+    """Download images maintaining original directory structure."""
     os.makedirs(local_dir, exist_ok=True)
 
     async def download_single(key):
         img_bytes, _ = await download_image(DEST_BUCKET, key)
         if img_bytes is not None:
-            local_path = os.path.join(local_dir, os.path.basename(key))
+            local_path = os.path.join(local_dir, key)  # ✅ Preserve subdirs
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)  # ✅ Create dirs
             with open(local_path, "wb") as f:
                 f.write(img_bytes)
             return key, local_path
