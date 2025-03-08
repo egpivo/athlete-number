@@ -41,7 +41,7 @@ async def main(args):
 
     idle_checks = 0
     max_idle_checks = 5
-
+    ocr_service = await initialize_ocr()
     while True:
         rows_to_process = await async_get_downloaded_not_processed(
             args.cutoff_date, args.env
@@ -68,7 +68,7 @@ async def main(args):
         if missing_paths:
             logging.warning(f"Missing files: {missing_paths}")
 
-        detection_results = await process_images_with_ocr(valid_paths)
+        detection_results = await process_images_with_ocr(ocr_service, valid_paths)
 
         await asyncio.to_thread(
             save_results_to_postgres, detection_results, args.cutoff_date, args.env
