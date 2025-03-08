@@ -11,10 +11,12 @@ from src.config import AWS_ACCESS_KEY, AWS_SECRET_KEY, DEST_BUCKET
 logger = logging.getLogger(__name__)
 
 # Initialize S3 client
+boto_config = Config(max_pool_connections=50)
 s3_client = boto3.client(
     "s3",
     aws_access_key_id=AWS_ACCESS_KEY,
     aws_secret_access_key=AWS_SECRET_KEY,
+    config=boto_config
 )
 
 
@@ -98,7 +100,7 @@ async def batch_download_images(image_keys: list, local_dir: str):
 
     async def download_single(key):
         img_bytes, _ = await download_image(DEST_BUCKET, key)
-        if img_bytes:
+        if img_bytes is not None:
             local_path = os.path.join(local_dir, os.path.basename(key))
             with open(local_path, "wb") as f:
                 f.write(img_bytes)
