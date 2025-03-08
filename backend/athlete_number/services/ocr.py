@@ -19,32 +19,31 @@ class OCRService:
     _instance = None
     _model = "stepfun-ai/GOT-OCR-2.0-hf"
 
-    def __init__(self, gpu_ids=[2, 3]):  # Assign OCR to GPUs 2 & 3
-        self.device = f"cuda:{gpu_ids[0]}" if torch.cuda.is_available() else "cpu"
-        self.gpu_ids = gpu_ids
-
+    def __init__(self, gpu_id=0, batch_size=8):
         if OCRService._instance is not None:
-            raise RuntimeError(
-                "OCRService is a singleton class. Use get_instance() instead."
-            )
+            raise RuntimeError("OCRService is a singleton; use get_instance() instead.")
 
-        self.model = AutoModelForImageTextToText.from_pretrained(self._model).to(
+        if not torch.cuda.is_available():
+            LOGGER.warning("CUDA not available. Running on CPU.")
+            self.device = torch.device("cpu")
+        else:
+            self.device = torch.device(f"cuda:{gpu_id}")
+            LOGGER.info(f"OCRService pinned to GPU {gpu_id}")
+
+        # Load model + processor
+        self.model = AutoModelForImageTextToText.from_pretrained(self._model_name).to(
             self.device
         )
-        if torch.cuda.device_count() > 1:
-            LOGGER.info(f"🔹 Using GPUs {gpu_ids} for OCR inference")
-            self.model = torch.nn.DataParallel(self.model, device_ids=gpu_ids)
+        self.processor = AutoProcessor.from_pretrained(self._model_name)
 
-        self.processor = AutoProcessor.from_pretrained(self._model)
-
-        # Read batch size from environment variable, default = 4
-        self.batch_size = int(os.getenv("OCR_BATCH_SIZE", 8))
+        # Set batch size
+        self.batch_size = batch_size
         LOGGER.info(f"🔹 OCR batch size set to {self.batch_size}")
 
     @classmethod
-    async def get_instance(cls, gpu_ids=[2, 3]):  # Assign GPUs dynamically
+    def get_instance(cls, gpu_id=0, batch_size=8):
         if cls._instance is None:
-            cls._instance = OCRService(gpu_ids=gpu_ids)
+            cls._instance = cls(gpu_id=gpu_id, batch_size=batch_size)
         return cls._instance
 
     def extract_numbers_from_images(self, images: List[Image.Image]) -> List[List[str]]:

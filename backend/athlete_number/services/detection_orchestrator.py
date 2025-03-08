@@ -1,8 +1,10 @@
 import asyncio
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 import numpy as np
+from athlete_number.services.detection import DetectionService
 from athlete_number.services.ocr import OCRService
 from athlete_number.utils.logger import setup_logger
 from PIL import Image
@@ -12,63 +14,84 @@ LOGGER = setup_logger(__name__)
 
 class DetectionOCRService:
     _instance = None
-    _debug_path = "debug_crops"
 
     def __init__(self, yolo_gpus=[0, 1], ocr_gpus=[2, 3]):
-        self.detection_service = None
-        self.ocr_service = None
-        self.lock = asyncio.Lock()
         self.yolo_gpus = yolo_gpus
         self.ocr_gpus = ocr_gpus
-
-        self.last_ocr_results = []
-        self.last_confidence_scores = []
+        self.detection_service = None
+        self.ocr_services = {}
+        self.executor = ThreadPoolExecutor(max_workers=len(ocr_gpus))
+        self.lock = asyncio.Lock()
 
     @classmethod
     async def get_instance(cls, yolo_gpus=[0, 1], ocr_gpus=[2, 3]):
-        """Singleton pattern for the orchestrator service."""
         if cls._instance is None:
-            cls._instance = DetectionOCRService(yolo_gpus, ocr_gpus)
+            cls._instance = cls(yolo_gpus, ocr_gpus)
             await cls._instance.initialize()
         return cls._instance
 
     async def initialize(self):
-        """Initialize YOLO and OCR services with multi-GPU support."""
         async with self.lock:
-            from athlete_number.services.detection import DetectionService
-
+            # Initialize detection service
             self.detection_service = await DetectionService.get_instance(
                 gpu_ids=self.yolo_gpus
             )
-            self.ocr_service = await OCRService.get_instance(gpu_ids=self.ocr_gpus)
-            LOGGER.info(f"✅ YOLO on GPUs {self.yolo_gpus}, OCR on GPUs {self.ocr_gpus}")
+
+            # Initialize OCR services for each GPU
+            for gpu_id in self.ocr_gpus:
+                service = OCRService(gpu_id=gpu_id)
+                self.ocr_services[gpu_id] = service
+                LOGGER.info(f"Initialized OCR service on GPU {gpu_id}")
+
+            LOGGER.info(f"YOLO GPUs: {self.yolo_gpus} | OCR GPUs: {self.ocr_gpus}")
 
     async def process_images(self, images: List[np.ndarray]) -> List[List[str]]:
         start_time = time.time()
 
-        detections_task = asyncio.create_task(
-            self.detection_service.detector.detect_async(images)
-        )
-        detections_batch = await detections_task  # Wait for YOLO to finish
+        # Phase 1: Parallel detection
+        detections = await self._parallel_detection(images)
 
-        if not detections_batch:
-            LOGGER.warning("⚠ No bib numbers detected in any image.")
-            return [[] for _ in images]
+        # Phase 2: Parallel OCR processing
+        results = await self._parallel_ocr_processing(detections)
 
-        pil_images = [
-            [Image.fromarray(det["image"]) for det in detection]
-            for detection in detections_batch
+        LOGGER.info(f"Total processing time: {time.time() - start_time:.2f}s")
+        return self._organize_results(results, detections)
+
+    async def _parallel_detection(self, images: List[np.ndarray]):
+        """Split detection across YOLO GPUs"""
+        batches = np.array_split(images, len(self.yolo_gpus))
+        futures = [self.detection_service.detect_async(batch) for batch in batches]
+        results = await asyncio.gather(*futures)
+        return [item for sublist in results for item in sublist]
+
+    async def _parallel_ocr_processing(self, detections):
+        """Distribute OCR across GPUs with load balancing"""
+        all_crops = [
+            Image.fromarray(det["image"])
+            for detection in detections
+            for det in detection
         ]
-        ocr_results_per_image = []
-        for image_list in pil_images:
-            ocr_results_per_image.append(
-                self.ocr_service.extract_numbers_from_images(image_list)
+
+        # Split work evenly across OCR GPUs
+        chunk_size = len(all_crops) // len(self.ocr_gpus) + 1
+        futures = []
+        for idx, gpu_id in enumerate(self.ocr_gpus):
+            chunk = all_crops[idx * chunk_size : (idx + 1) * chunk_size]
+            futures.append(
+                self.executor.submit(
+                    self.ocr_services[gpu_id].extract_numbers_from_images, chunk
+                )
             )
 
-        processing_time = round(time.time() - start_time, 4)
-        LOGGER.info(
-            f"Final Detected Athlete Numbers: {ocr_results_per_image} "
-            f"(Processing Time: {processing_time}s"
-        )
+        return await asyncio.gather(*[asyncio.wrap_future(f) for f in futures])
 
-        return ocr_results_per_image
+    def _organize_results(self, ocr_results, detections):
+        """Reconstruct original image structure"""
+        flat_results = [r for chunk in ocr_results for r in chunk]
+        ptr = 0
+        organized = []
+        for detection in detections:
+            num_crops = len(detection)
+            organized.append(flat_results[ptr : ptr + num_crops])
+            ptr += num_crops
+        return organized

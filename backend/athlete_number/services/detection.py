@@ -19,11 +19,15 @@ class DigitDetector:
         iou: float = 0.5,
         max_det: int = 100,
         image_size: int = 1280,
-        gpu_ids=[0, 1],
+        gpu_id=0,
     ):
         self.model_path = model_path
-        self.device = f"cuda:{gpu_ids[0]}" if torch.cuda.is_available() else "cpu"
-        self.gpu_ids = gpu_ids  # Store assigned GPUs
+        if not torch.cuda.is_available():
+            LOGGER.warning("CUDA not available. Running on CPU.")
+            self.device = torch.device("cpu")
+        else:
+            self.device = torch.device(f"cuda:{gpu_id}")
+            LOGGER.info(f"OCRService pinned to GPU {gpu_id}")
 
         self.conf = conf
         self.iou = iou
@@ -31,11 +35,6 @@ class DigitDetector:
         self.image_size = image_size
 
         self.model = YOLO(model_path).to(self.device)
-        if len(gpu_ids) > 1:
-            LOGGER.info(f"🔹 Using GPUs {gpu_ids} for YOLO inference")
-            self.model = torch.nn.DataParallel(
-                self.model, device_ids=gpu_ids
-            )  # ✅ Use DataParallel
         self._metadata = {"version": "1.0.0"}
 
     @property
@@ -95,26 +94,50 @@ class DetectionService:
     _instance = None
 
     def __init__(self, gpu_ids=[0, 1]):
-        self.detector = None
+        self.detectors = []
         self.lock = asyncio.Lock()
         self.gpu_ids = gpu_ids
 
     @classmethod
     async def get_instance(cls, gpu_ids=[0, 1]):
+        """Singleton pattern with multi-GPU support"""
         if cls._instance is None:
             cls._instance = DetectionService(gpu_ids=gpu_ids)
             await cls._instance.initialize()
         return cls._instance
 
     async def initialize(self):
-        """Asynchronously initialize the DigitDetector."""
+        """Initialize multiple YOLO detectors on different GPUs"""
         async with self.lock:
-            if self.detector is not None:
+            if self.detectors:
                 return
+
             try:
                 model_path = ModelPathResolver(YOLO_PATH).get_model_path()
-                self.detector = DigitDetector(model_path)
-                LOGGER.info("Model initialized successfully.")
+                self.detectors = [
+                    DigitDetector(model_path, gpu_id=gpu_id) for gpu_id in self.gpu_ids
+                ]
+                LOGGER.info(f"🔥 Initialized YOLO detectors on GPUs {self.gpu_ids}")
             except Exception as e:
                 LOGGER.critical(f"Model initialization failed: {e}")
-                raise RuntimeError("Model initialization failed")
+                raise RuntimeError("Detection service startup failed")
+
+    async def detect_async(self, images: List[np.ndarray]) -> List[List[Dict]]:
+        """Parallel detection across multiple GPUs"""
+        try:
+            # Split images across available detectors
+            chunks = np.array_split(images, len(self.detectors))
+
+            # Create parallel detection tasks
+            futures = [
+                detector.detect_async(chunk)
+                for detector, chunk in zip(self.detectors, chunks)
+            ]
+
+            # Gather and combine results
+            results = await asyncio.gather(*futures)
+            return [item for sublist in results for item in sublist]
+
+        except Exception as e:
+            LOGGER.error(f"Parallel detection failed: {e}")
+            return []

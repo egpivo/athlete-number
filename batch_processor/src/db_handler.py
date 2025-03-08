@@ -50,10 +50,7 @@ def mark_keys_as_processed(image_keys: list, cutoff_date: str, env: str) -> None
         image_keys = set(image_keys)
         conn = psycopg2.connect(**DB_CREDENTIALS)
         with conn.cursor() as cur:
-            # Use executemany with ON CONFLICT to handle duplicates
-            args = [
-                (key, cutoff_date, env) for key in image_keys
-            ]  # ✅ Include cutoff_date
+            args = [(key, cutoff_date, env) for key in image_keys]
             cur.executemany(
                 f"""INSERT INTO {PROCESSED_KEY_TABLE} (image_key, cutoff_date, env)
                    VALUES (%s, %s, %s)

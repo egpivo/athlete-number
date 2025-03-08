@@ -1,5 +1,4 @@
 import os
-import re
 
 import pandas as pd
 import psycopg2
@@ -22,18 +21,9 @@ TABLE_NAME = "allsports_bib_number_detection"
 
 
 def process_results(results):
-    """Convert OCR results into structured format."""
-    unique_rows = set()
-
-    for result in results:
-        eid, cid, photonum = result.filename.split("/")[-1].split("_")[:3]
-
-        if result.extracted_number:
-            for tag in result.extracted_number:
-                if re.fullmatch(r"\d{5}", tag):
-                    unique_rows.add((eid, cid, photonum, tag))
-
-    return list(unique_rows)
+    """Extract unique digit-only tags from OCR results."""
+    unique_digits = {tag for result in results for tag in result if tag.isdigit()}
+    return list(unique_digits)
 
 
 def save_results_to_postgres(results, cutoff_date, env):
