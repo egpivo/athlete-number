@@ -13,11 +13,11 @@ async def process_images_with_ocr(ocr_service, images: list):
 
     results = [
         NumberExtractionResponse(
-            filename=name,
+            filename=image,
             extracted_number=extracted_numbers_list[i]
             if isinstance(extracted_numbers_list[i], list)
             else [extracted_numbers_list[i]],
         )
-        for i, (_, name) in enumerate(images)
+        for i, image in enumerate(images)
     ]
     return results
