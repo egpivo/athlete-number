@@ -102,8 +102,8 @@ async def batch_download_images(image_keys: list, local_dir: str):
     async def download_single(key):
         img_bytes, _ = await download_image(DEST_BUCKET, key)
         if img_bytes is not None:
-            local_path = os.path.join(local_dir, key)  # ✅ Preserve subdirs
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)  # ✅ Create dirs
+            local_path = os.path.join(local_dir, key)
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, "wb") as f:
                 f.write(img_bytes)
             return key, local_path

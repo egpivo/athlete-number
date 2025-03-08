@@ -15,6 +15,8 @@ from src.sqlite_db_handler import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+FILTER_PATTERN = "_tn_"
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -63,7 +65,8 @@ async def main(args):
             image_keys = image_keys[:remaining]
 
         logger.info(f"Downloading batch of {len(image_keys)} images...")
-        downloaded = await batch_download_images(image_keys, args.local_dir)
+        filtered_keys = [key for key in image_keys if FILTER_PATTERN in key]
+        downloaded = await batch_download_images(filtered_keys, args.local_dir)
 
         if not downloaded:
             logger.warning("No images downloaded in this batch.")

@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 
+import cv2
 from src.ocr_handler import initialize_ocr, process_images_with_ocr
 from src.result_handler import save_results_to_postgres
 from src.sqlite_db_handler import (
@@ -62,7 +63,7 @@ async def main(args):
 
         batch = rows_to_process[: args.batch_size]
         image_keys, local_paths = zip(*batch)
-        image_list = list(local_paths)
+        image_list = [cv2.imread(path) for path in local_paths]
         detection_results = await process_images_with_ocr(ocr_service, image_list)
 
         # Save results asynchronously
