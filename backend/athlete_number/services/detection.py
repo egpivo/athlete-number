@@ -36,7 +36,7 @@ class DigitDetector:
             with torch.cuda.device(self.gpu_id):
                 self.model = YOLO(model_path).to(self.device)
                 self.model.model.float()  # Ensure proper weight initialization
-                LOGGER.info(f"Loaded YOLO v{self.model.__version__} on GPU {gpu_id}")
+                LOGGER.info(f"Loaded YOLO on GPU {gpu_id}")
 
         except Exception as e:
             LOGGER.critical(f"Model loading failed: {str(e)}")
