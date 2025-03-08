@@ -22,7 +22,7 @@ def parse_args():
     )
     parser.add_argument("--cutoff_date", required=True, help="e.g., 2025-03-08")
     parser.add_argument("--env", default="test", help="Environment (test/production)")
-    parser.add_argument("--page_size", type=int, default=50)
+    parser.add_argument("--batch_size", type=int, default=50)
     parser.add_argument(
         "--max_images", type=int, default=None, help="Max total images to download"
     )
@@ -49,7 +49,7 @@ async def main(args):
         bucket=DEST_BUCKET,
         prefix=f"{DEST_FOLDER}/{args.cutoff_date}",
         last_processed_key=last_processed_key,
-        batch_size=args.page_size,
+        batch_size=args.batch_size,
     ):
         if not image_keys:
             logger.info("No more images to download.")
