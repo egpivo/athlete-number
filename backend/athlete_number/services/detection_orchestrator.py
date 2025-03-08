@@ -64,16 +64,9 @@ class DetectionOCRService:
 
     async def _parallel_detection(self, images: list):
         batches = split_list_evenly(images, len(self.yolo_gpus))
-
-        tasks = [
-            asyncio.create_task(self.detectors[gpu].detect(batch))
-            for gpu, batch in zip(self.yolo_gpus, batches)
-        ]
-
-        results = await asyncio.gather(*tasks)
-        detections = [detection for result in results for detection in result]
-
-        return detections
+        futures = [self.detection_service.detect_async(batch) for batch in batches]
+        results = await asyncio.gather(*futures)
+        return [item for sublist in results for item in sublist]
 
     async def _parallel_ocr_processing(self, detections):
         """Distribute OCR across GPUs with load balancing"""
