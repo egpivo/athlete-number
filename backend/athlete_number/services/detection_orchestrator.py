@@ -15,7 +15,7 @@ LOGGER = setup_logger(__name__)
 class DetectionOCRService:
     _instance = None
 
-    def __init__(self, yolo_gpus=[0, 1], ocr_gpus=[2, 3]):
+    def __init__(self, yolo_gpus=[0], ocr_gpus=[0]):
         self.yolo_gpus = yolo_gpus
         self.ocr_gpus = ocr_gpus
         self.detection_service = None
@@ -24,7 +24,7 @@ class DetectionOCRService:
         self.lock = asyncio.Lock()
 
     @classmethod
-    async def get_instance(cls, yolo_gpus=[0, 1], ocr_gpus=[2, 3]):
+    async def get_instance(cls, yolo_gpus=[0], ocr_gpus=[0]):
         if cls._instance is None:
             cls._instance = cls(yolo_gpus, ocr_gpus)
             await cls._instance.initialize()

@@ -6,7 +6,6 @@ import torch
 from athlete_number.core.configs import YOLO_PATH
 from athlete_number.services.utils import ModelPathResolver, resize_image_with_width
 from athlete_number.utils.logger import setup_logger
-from torch import nn
 from ultralytics import YOLO
 
 LOGGER = setup_logger(__name__)
@@ -31,14 +30,8 @@ class DigitDetector:
 
         # Load model on specific GPU
         with torch.cuda.device(gpu_id):
-            self.model = YOLO(model_path).to(self.device)
-
-            # Add compatibility wrapper
-            if not hasattr(self.model.model[0], "bn"):
-                for m in self.model.model.modules():
-                    if isinstance(m, nn.Conv2d):
-                        m.bn = nn.BatchNorm2d(m.out_channels)
-                        m.act = nn.SiLU()
+            self.model = YOLO(model_path, task="detect").to(self.device)
+            LOGGER.info(f"Loaded YOLO on {self.device}")
 
         self._metadata = {"version": "1.0.0"}
 
@@ -144,4 +137,4 @@ class DetectionService:
 
         except Exception as e:
             LOGGER.error(f"Parallel detection failed: {e}")
-            return []
+            return [[] for _ in images]
