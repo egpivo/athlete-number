@@ -7,9 +7,9 @@ from athlete_number.core.configs import YOLO_PATH
 from athlete_number.services.utils import ModelPathResolver, resize_image_with_width
 from athlete_number.utils.logger import setup_logger
 from ultralytics import YOLO
+from PIL import Image
 
 LOGGER = setup_logger(__name__)
-
 
 class DigitDetector:
     def __init__(
@@ -31,7 +31,7 @@ class DigitDetector:
         # Load model on specific GPU
         with torch.cuda.device(gpu_id):
             self.model = YOLO(model_path, task="detect").to(self.device)
-            LOGGER.info(f"Loaded YOLO on {self.device}")
+            LOGGER.info(f"Loaded YOLO on {self.device} with GPU ID {gpu_id}")
 
         self._metadata = {"version": "1.0.0"}
 
@@ -49,8 +49,11 @@ class DigitDetector:
 
     def detect(self, images: List[np.ndarray]) -> List[List[Dict]]:
         try:
+            # Convert numpy arrays to PIL images if necessary
+            pil_images = [Image.fromarray(image) for image in images]
+
             results = self.model(
-                images,
+                pil_images,
                 imgsz=self.image_size,
                 conf=self.conf,
                 iou=self.iou,
@@ -85,7 +88,6 @@ class DigitDetector:
             )
 
         return detections
-
 
 class DetectionService:
     _instance = None
@@ -138,3 +140,4 @@ class DetectionService:
         except Exception as e:
             LOGGER.error(f"Parallel detection failed: {e}")
             return [[] for _ in images]
+
