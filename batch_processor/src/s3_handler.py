@@ -6,6 +6,7 @@ import aiobotocore
 import boto3
 import cv2
 import numpy as np
+from botocore.config import Config
 from src.config import AWS_ACCESS_KEY, AWS_SECRET_KEY, DEST_BUCKET
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,7 @@ s3_client = boto3.client(
     "s3",
     aws_access_key_id=AWS_ACCESS_KEY,
     aws_secret_access_key=AWS_SECRET_KEY,
-    config=boto_config
+    config=boto_config,
 )
 
 
