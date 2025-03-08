@@ -9,9 +9,7 @@ async def initialize_ocr():
 
 async def process_images_with_ocr(ocr_service, images: list):
     """Detect bib numbers using YOLO, then extract numbers using OCR."""
-    extracted_numbers_list = await ocr_service.process_images(
-        [img for img, _ in images]
-    )
+    extracted_numbers_list = await ocr_service.process_images(images)
 
     results = [
         NumberExtractionResponse(
