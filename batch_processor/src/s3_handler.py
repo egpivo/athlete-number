@@ -12,7 +12,7 @@ from src.config import AWS_ACCESS_KEY, AWS_SECRET_KEY, DEST_BUCKET
 logger = logging.getLogger(__name__)
 
 # Initialize S3 client
-boto_config = Config(max_pool_connections=50)
+boto_config = Config(max_pool_connections=200)
 s3_client = boto3.client(
     "s3",
     aws_access_key_id=AWS_ACCESS_KEY,
