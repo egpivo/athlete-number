@@ -90,13 +90,13 @@ class DigitDetector:
 class DetectionService:
     _instance = None
 
-    def __init__(self, gpu_ids=[0, 1]):
+    def __init__(self, gpu_ids=[0]):
         self.detectors = []
         self.lock = asyncio.Lock()
         self.gpu_ids = gpu_ids
 
     @classmethod
-    async def get_instance(cls, gpu_ids=[0, 1]):
+    async def get_instance(cls, gpu_ids=[0]):
         """Singleton pattern with multi-GPU support"""
         if cls._instance is None:
             cls._instance = DetectionService(gpu_ids=gpu_ids)

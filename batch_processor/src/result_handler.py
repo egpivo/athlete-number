@@ -21,9 +21,14 @@ TABLE_NAME = "allsports_bib_number_detection"
 
 
 def process_results(results):
-    """Extract unique digit-only tags from OCR results."""
-    unique_digits = {tag for result in results for tag in result if tag.isdigit()}
-    return list(unique_digits)
+    """Convert OCR results into structured format."""
+    rows = []
+    for result in results:
+        eid, cid, photonum = result.filename.split("/")[-1].split("_")[:3]
+        if result.extracted_number:
+            for tag in result.extracted_number:
+                rows.append((eid, cid, photonum, tag))
+    return rows
 
 
 def save_results_to_postgres(results, cutoff_date, env):
