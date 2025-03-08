@@ -42,9 +42,8 @@ echo "🚀 Starting Image Download Pipeline..."
 python download_bib_numbers.py \
     --cutoff_date "$CUTOFF_DATE" \
     --env "$ENVIRONMENT" \
-    --batch_size "$BATCH_SIZE" \
+    --batch_size "$PAGE_SIZE" \
     --local_dir "$LOCAL_DIR" \
-    --page_size "$PAGE_SIZE" \
     --max_images "$MAX_IMAGES" > "$LOG_DIR/download_${CUTOFF_DATE}_$(date +%Y%m%d_%H%M%S).log" 2>&1 &
 
 DOWNLOAD_PID=$!
