@@ -4,8 +4,6 @@ import os
 
 import aiobotocore
 import boto3
-import cv2
-import numpy as np
 from botocore.config import Config
 from src.config import AWS_ACCESS_KEY, AWS_SECRET_KEY, DEST_BUCKET
 
@@ -82,14 +80,7 @@ async def download_image(bucket: str, key: str):
             s3_client.get_object, Bucket=bucket_name, Key=key
         )
         image_bytes = response["Body"].read()
-        image_np = np.frombuffer(image_bytes, np.uint8)
-        image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
-
-        if image is None:
-            logger.warning(f"Failed to decode image {key}. Skipping.")
-            return None, key
-
-        return image, key
+        return image_bytes, key
     except Exception as e:
         logger.error(f"Error downloading {key}: {e}")
         return None, key

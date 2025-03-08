@@ -50,7 +50,7 @@ DOWNLOAD_PID=$!
 echo "Download job PID: $DOWNLOAD_PID"
 
 # Wait for 2 minutes before starting OCR pipeline
-sleep 120
+sleep 60
 
 # Run the Detection/OCR Pipeline in parallel
 echo "🖥️ Starting OCR Detection Pipeline..."
