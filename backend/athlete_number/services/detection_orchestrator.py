@@ -12,6 +12,11 @@ from PIL import Image
 LOGGER = setup_logger(__name__)
 
 
+def split_list_evenly(lst, n):
+    k, m = divmod(len(lst), n)
+    return [lst[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n)]
+
+
 class DetectionOCRService:
     _instance = None
 
@@ -57,12 +62,18 @@ class DetectionOCRService:
         LOGGER.info(f"Total processing time: {time.time() - start_time:.2f}s")
         return self._organize_results(results, detections)
 
-    async def _parallel_detection(self, images: List[np.ndarray]):
-        """Split detection across YOLO GPUs"""
-        batches = np.array_split(images, len(self.yolo_gpus))
-        futures = [self.detection_service.detect_async(batch) for batch in batches]
-        results = await asyncio.gather(*futures)
-        return [item for sublist in results for item in sublist]
+    async def _parallel_detection(self, images: list):
+        batches = split_list_evenly(images, len(self.yolo_gpus))
+
+        tasks = [
+            asyncio.create_task(self.detectors[gpu].detect(batch))
+            for gpu, batch in zip(self.yolo_gpus, batches)
+        ]
+
+        results = await asyncio.gather(*tasks)
+        detections = [detection for result in results for detection in result]
+
+        return detections
 
     async def _parallel_ocr_processing(self, detections):
         """Distribute OCR across GPUs with load balancing"""
