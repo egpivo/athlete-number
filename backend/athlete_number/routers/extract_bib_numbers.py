@@ -82,7 +82,9 @@ async def extract_athlete_numbers(
                     "athlete_numbers": extracted_numbers,
                     "processing_time": processing_time / len(batch_filenames),
                     "model_versions": {
-                        "detection": orchestrator.detection_service.detector.model_version,
+                        "detection": orchestrator.detection_service.detroctors[
+                            0
+                        ].model_version,
                         "ocr": "GOT-OCR-2.0",
                     },
                 }
