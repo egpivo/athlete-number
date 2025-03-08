@@ -41,11 +41,7 @@ def save_results_to_postgres(results, cutoff_date, env):
 
     try:
         conn = psycopg2.connect(
-            dbname="your_db",
-            user="your_user",
-            password="your_password",
-            host="your_host",
-            port=5432,
+            host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PW
         )
         cur = conn.cursor()
 
