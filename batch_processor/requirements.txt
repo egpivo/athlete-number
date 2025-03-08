@@ -4,3 +4,5 @@ pandas==2.2.0
 tqdm==4.66.1
 psycopg2-binary==2.9.10
 aiobotocore==2.20.0
+sqlalchemy
+boto3
