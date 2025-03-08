@@ -61,26 +61,31 @@ async def main(args):
             idle_checks = 0
 
         batch = rows_to_process[: args.batch_size]
+
+        # Separate keys and paths clearly
         image_keys, local_paths = zip(*batch)
 
-        valid_paths = [path for path in local_paths if os.path.exists(path)]
-        missing_paths = set(local_paths) - set(valid_paths)
-        if missing_paths:
-            logging.warning(f"Missing files: {missing_paths}")
+        # Use the local_paths directly as they're already complete
+        image_list = list(local_paths)
 
-        detection_results = await process_images_with_ocr(ocr_service, valid_paths)
+        # Now process with OCR
+        detection_results = await process_images_with_ocr(ocr_service, image_list)
 
+        # Save results asynchronously
         await asyncio.to_thread(
             save_results_to_postgres, detection_results, args.cutoff_date, args.env
         )
-        await async_mark_keys_as_processed(image_keys, args.cutoff_date, args.env)
 
-        for path in valid_paths:
+        # Delete files after successful processing
+        for path in local_paths:
             try:
                 os.remove(path)
                 logging.info(f"Removed {path}")
             except OSError as e:
                 logging.error(f"Unable to delete {path}: {e}")
+
+        # Mark as processed in your SQLite DB
+        await async_mark_keys_as_processed(image_keys, args.cutoff_date, args.env)
 
 
 if __name__ == "__main__":

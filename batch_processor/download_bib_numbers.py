@@ -72,8 +72,9 @@ async def main(args):
         local_keys = [key for key, path in downloaded]
 
         # Mark downloaded images in SQLite DB
+        local_paths = [f"{args.local_dir}/{local_key}" for local_key in local_keys]
         await async_mark_keys_as_downloaded(
-            local_keys, [args.local_dir] * len(local_keys), args.cutoff_date, args.env
+            local_keys, local_paths, args.cutoff_date, args.env
         )
 
         # Update checkpoint
