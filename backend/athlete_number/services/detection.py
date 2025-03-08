@@ -21,26 +21,18 @@ class DigitDetector:
         image_size: int = 1280,
         gpu_id=0,
     ):
-        self.gpu_id = gpu_id
-        self.device = torch.device(
-            f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu"
-        )
-
+        self.model_path = model_path
+        self.device = f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu"
         self.conf = conf
         self.iou = iou
         self.max_det = max_det
         self.image_size = image_size
 
-        try:
-            # Load model with strict=False to ignore missing bn
-            with torch.cuda.device(self.gpu_id):
-                self.model = YOLO(model_path).to(self.device)
-                self.model.model.float()  # Ensure proper weight initialization
-                LOGGER.info(f"Loaded YOLO on GPU {gpu_id}")
+        # Load model on specific GPU
+        with torch.cuda.device(gpu_id):
+            self.model = YOLO(model_path).to(self.device)
+            LOGGER.info(f"Loaded YOLO on {self.device}")
 
-        except Exception as e:
-            LOGGER.critical(f"Model loading failed: {str(e)}")
-            raise RuntimeError("YOLO initialization failed") from e
         self._metadata = {"version": "1.0.0"}
 
     @property
