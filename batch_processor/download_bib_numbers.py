@@ -3,11 +3,10 @@ import asyncio
 import logging
 import os
 
-from src.config import DEST_BUCKET, DEST_FOLDER
 from src.s3_handler import batch_download_images, list_s3_images_incremental
 from src.sqlite_db_handler import (
     async_get_last_checkpoint,
-    async_write_checkpoint_safely,
+    async_write_checkpoint,
     init_sqlite_db,
 )
 
@@ -33,33 +32,36 @@ async def main(args):
     last_processed_key = None
     if not args.force_start:
         last_processed_key = await async_get_last_checkpoint(args.cutoff_date, args.env)
-
-    if last_processed_key:
-        logger.info(f"Resuming from last checkpoint: {last_processed_key}")
-    else:
-        logger.info("No checkpoint found or force restart requested. Starting fresh.")
+        logging.info(f"Last checkpoint: {last_processed_key or 'None'}")
 
     async for image_keys, next_start_after in list_s3_images_incremental(
-        bucket=DEST_BUCKET,
-        prefix=f"{DEST_FOLDER}/{args.cutoff_date}",
+        bucket=args.bucket,
+        prefix=args.prefix,
         last_processed_key=last_processed_key,
         batch_size=args.page_size,
     ):
         if not image_keys:
-            logger.info("No new images. Done.")
+            logger.info("No more images to download.")
             break
 
-        downloaded = await batch_download_images(image_keys, local_dir="/tmp/images")
+        logger.info(f"Downloading {len(image_keys)} images...")
+        await batch_download_images(image_keys, args.local_dir)
 
-        last_key_of_this_batch = image_keys[-1]
-        await async_write_checkpoint_safely(
-            new_checkpoint=last_key_of_this_batch,
-            cutoff_date=args.cutoff_date,
-            env=args.env,
-        )
+        if not downloaded:
+            logger.warning("No images downloaded.")
+            continue
 
-        last_processed_key = last_key_of_this_batch
-        logger.info(f"Updated checkpoint to {last_processed_key}")
+        local_keys = [key for key, path in downloaded]
+
+        # Mark downloaded in SQLite DB
+        await async_mark_keys_as_downloaded(local_keys, args.cutoff_date, args.env)
+
+        # Update checkpoint after successful download
+        last_key_in_batch = local_keys[-1]
+        await async_write_checkpoint(args.cutoff_date, args.env, last_key_in_batch)
+        logging.info(f"Checkpoint updated to {last_key_in_batch}")
+
+        logging.info(f"✅ Batch downloaded and tracked: {len(local_keys)} images.")
 
 
 if __name__ == "__main__":
