@@ -55,18 +55,10 @@ def save_results_to_postgres(results, cutoff_date, env):
 
         unique_entries = {}
         for r in structured_results:
-            key = (r["eid"], r["cid"], r["photonum"], cutoff_date, env)
-            unique_entries[key] = (
-                r["eid"],
-                r["cid"],
-                r["photonum"],
-                r["tag"],
-                cutoff_date,
-                env,
-            )
+            key = (r[0], r[1], r[2], cutoff_date, env)  # ✅ use integers
+            unique_entries[key] = (r[0], r[1], r[2], r[3], cutoff_date, env)
 
         final_records = list(unique_entries.values())
-
         execute_values(cur, insert_query, final_records)
 
         conn.commit()
