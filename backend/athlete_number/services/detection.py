@@ -21,20 +21,26 @@ class DigitDetector:
         image_size: int = 1280,
         gpu_id=0,
     ):
-        self.model_path = model_path
-        if not torch.cuda.is_available():
-            LOGGER.warning("CUDA not available. Running on CPU.")
-            self.device = torch.device("cpu")
-        else:
-            self.device = torch.device(f"cuda:{gpu_id}")
-            LOGGER.info(f"OCRService pinned to GPU {gpu_id}")
+        self.gpu_id = gpu_id
+        self.device = torch.device(
+            f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu"
+        )
 
         self.conf = conf
         self.iou = iou
         self.max_det = max_det
         self.image_size = image_size
 
-        self.model = YOLO(model_path).to(self.device)
+        try:
+            # Load model with strict=False to ignore missing bn
+            with torch.cuda.device(self.gpu_id):
+                self.model = YOLO(model_path).to(self.device)
+                self.model.model.float()  # Ensure proper weight initialization
+                LOGGER.info(f"Loaded YOLO v{self.model.__version__} on GPU {gpu_id}")
+
+        except Exception as e:
+            LOGGER.critical(f"Model loading failed: {str(e)}")
+            raise RuntimeError("YOLO initialization failed") from e
         self._metadata = {"version": "1.0.0"}
 
     @property
@@ -51,8 +57,7 @@ class DigitDetector:
 
     def detect(self, images: List[np.ndarray]) -> List[List[Dict]]:
         try:
-            model_instance = getattr(self.model, "module", self.model)
-            results = model_instance(
+            results = self.model(
                 images,
                 imgsz=self.image_size,
                 conf=self.conf,
