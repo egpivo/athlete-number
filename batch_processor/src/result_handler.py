@@ -33,44 +33,51 @@ def process_results(results):
 
 def save_results_to_postgres(results, cutoff_date, env):
     """Insert detection results into PostgreSQL with cutoff_date and env."""
-
     structured_results = process_results(results)
 
     if not structured_results:
-        print("No data to insert.")
+        print("❌ No results to insert.")
         return
 
     try:
-        # Connect to PostgreSQL
         conn = psycopg2.connect(
-            host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PW
+            dbname="your_db",
+            user="your_user",
+            password="your_password",
+            host="your_host",
+            port=5432,
         )
         cur = conn.cursor()
 
-        # Insert query using batch insert
-        insert_query = f"""
-        INSERT INTO {TABLE_NAME} (eid, cid, photonum, tag, cutoff_date, env)
+        insert_query = """
+        INSERT INTO allsports_bib_number_detection (eid, cid, photonum, tag, cutoff_date, env)
         VALUES %s
-        ON CONFLICT (eid, cid, photonum, tag, cutoff_date, env) DO UPDATE
-        SET modified_at = NOW();
+        ON CONFLICT (eid, cid, photonum, cutoff_date, env) DO UPDATE
+        SET
+            tag = EXCLUDED.tag
         """
 
-        # Prepare data by adding cutoff_date and env to each record
-        records = [
-            (r[0], r[1], r[2], r[3], cutoff_date, env) for r in structured_results
-        ]
+        unique_entries = {}
+        for r in structured_results:
+            key = (r["eid"], r["cid"], r["photonum"], cutoff_date, env)
+            unique_entries[key] = (
+                r["eid"],
+                r["cid"],
+                r["photonum"],
+                r["tag"],
+                cutoff_date,
+                env,
+            )
 
-        # Batch insert data
-        execute_values(cur, insert_query, records)
+        final_records = list(unique_entries.values())
 
-        # Commit changes
+        execute_values(cur, insert_query, final_records)
+
         conn.commit()
         cur.close()
         conn.close()
 
-        print(
-            f"✅ Successfully inserted/updated {len(records)} records into {TABLE_NAME}"
-        )
+        print(f"✅ Successfully inserted/updated {len(final_records)} unique records.")
 
     except Exception as e:
         print(f"❌ Error inserting data into PostgreSQL: {e}")

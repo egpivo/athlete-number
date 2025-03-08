@@ -3,7 +3,7 @@
 # Default Parameters
 ENVIRONMENT="test"
 LOCAL_DIR="./local_images"
-BATCH_SIZE=20
+BATCH_SIZE=10
 PAGE_SIZE=50
 MAX_IMAGES=10000
 LOG_DIR="./logs"
