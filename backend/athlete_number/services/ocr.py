@@ -17,7 +17,7 @@ BIB_NUM_LENGTH = int(os.getenv("BIB_NUM_LENGTH", "0"))
 
 class OCRService:
     _instance = None
-    _model = "stepfun-ai/GOT-OCR-2.0-hf"
+    _model_name = "stepfun-ai/GOT-OCR-2.0-hf"
 
     def __init__(self, gpu_id=0, batch_size=8):
         if OCRService._instance is not None:
