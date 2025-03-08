@@ -55,20 +55,14 @@ async def main(args):
             if idle_checks >= max_idle_checks:
                 logger.info("No images found for a long time. Exiting.")
                 break
-            await asyncio.sleep(args.idle_checks)
+            await asyncio.sleep(idle_checks)
             continue
         else:
             idle_checks = 0
 
         batch = rows_to_process[: args.batch_size]
-
-        # Separate keys and paths clearly
         image_keys, local_paths = zip(*batch)
-
-        # Use the local_paths directly as they're already complete
         image_list = list(local_paths)
-
-        # Now process with OCR
         detection_results = await process_images_with_ocr(ocr_service, image_list)
 
         # Save results asynchronously
