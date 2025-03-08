@@ -93,21 +93,20 @@ async def download_image(bucket: str, key: str):
 
 
 async def batch_download_images(image_keys: list, local_dir: str):
-    """Download images asynchronously and save to local_dir."""
+    """Download images and return [(key, local_path), ...]"""
     os.makedirs(local_dir, exist_ok=True)
 
-    async def download_and_save(key):
-        image_bytes, key = await download_image(DEST_BUCKET, key)
-        if image_bytes:
+    async def download_single(key):
+        img_bytes, _ = await download_image(DEST_BUCKET, key)
+        if img_bytes:
             local_path = os.path.join(local_dir, os.path.basename(key))
             with open(local_path, "wb") as f:
-                f.write(image_bytes)
+                f.write(img_bytes)
             return key, local_path
         return None
 
-    tasks = [download_and_save(key) for key in image_keys]
-    results = await asyncio.gather(*tasks)
-    return [(key, path) for path, key in results if path]
+    results = await asyncio.gather(*(download_single(k) for k in image_keys))
+    return [(key, path) for key, path in results if path is not None]
 
 
 async def read_checkpoint(bucket: str, key: str) -> str:

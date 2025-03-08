@@ -84,6 +84,27 @@ def write_checkpoint(cutoff_date, env, last_processed_key):
     conn.close()
 
 
+def mark_keys_as_downloaded(image_keys: list, cutoff_date: str, env: str):
+    """Insert downloaded image keys into SQLite DB."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    for key in set(image_keys):
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO downloaded_images (image_key, cutoff_date, env)
+            VALUES (?, ?, ?)
+        """,
+            (key, cutoff_date, env),
+        )
+    conn.commit()
+    conn.close()
+
+
+async def async_mark_keys_as_downloaded(image_keys: list, cutoff_date: str, env: str):
+    """Async wrapper to insert downloaded image keys into SQLite DB."""
+    await asyncio.to_thread(mark_keys_as_downloaded, image_keys, cutoff_date, env)
+
+
 async def async_get_last_checkpoint(cutoff_date, env):
     return await asyncio.to_thread(get_last_checkpoint, cutoff_date, env)
 

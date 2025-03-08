@@ -3,9 +3,11 @@ import asyncio
 import logging
 import os
 
+from src.config import DEST_BUCKET, DEST_FOLDER
 from src.s3_handler import batch_download_images, list_s3_images_incremental
 from src.sqlite_db_handler import (
     async_get_last_checkpoint,
+    async_mark_keys_as_downloaded,
     async_write_checkpoint,
     init_sqlite_db,
 )
@@ -35,8 +37,8 @@ async def main(args):
         logging.info(f"Last checkpoint: {last_processed_key or 'None'}")
 
     async for image_keys, next_start_after in list_s3_images_incremental(
-        bucket=args.bucket,
-        prefix=args.prefix,
+        bucket=DEST_BUCKET,
+        prefix=f"{DEST_FOLDER}/{args.cutoff_date}",
         last_processed_key=last_processed_key,
         batch_size=args.page_size,
     ):
@@ -45,7 +47,7 @@ async def main(args):
             break
 
         logger.info(f"Downloading {len(image_keys)} images...")
-        await batch_download_images(image_keys, args.local_dir)
+        downloaded = await batch_download_images(image_keys, args.local_dir)
 
         if not downloaded:
             logger.warning("No images downloaded.")
