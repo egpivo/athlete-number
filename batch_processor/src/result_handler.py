@@ -48,7 +48,7 @@ def save_results_to_postgres(results, cutoff_date, env):
         insert_query = """
         INSERT INTO allsports_bib_number_detection (eid, cid, photonum, tag, cutoff_date, env)
         VALUES %s
-        ON CONFLICT (eid, cid, photonum, cutoff_date, env) DO UPDATE
+        ON CONFLICT (eid, cid, photonum, tag, cutoff_date, env) DO UPDATE
         SET
             tag = EXCLUDED.tag
         """
