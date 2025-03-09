@@ -29,10 +29,11 @@ ses = boto3.client("ses", region_name="us-east-1")
 # ✅ Email Configuration
 SENDER_EMAIL = "joseph.wang@instai.co"
 RECIPIENT_EMAILS = [
-    "joseph.wang@instai.co",
+    # "daniel.ratner@instai.co",
     "honami@photocreate.com.tw",
-    "keyu.pi@instai.co",
+    "joseph.wang@instai.co",
     "justin.chang@instai.co",
+    "keyu.pi@instai.co",
     "yingling.yang@instai.co",
 ]
 TEST_SUBJECT = "[InstAI] Bib Number Detection Report - TEST"
@@ -69,10 +70,13 @@ def get_google_sheets_credentials():
         return None
 
 
-def save_csv_to_google_sheets(csv_file, cutoff_date):
+def save_csv_to_google_sheets(csv_file, cutoff_date, race_id):
     """Upload CSV content to Google Sheets while preserving leading zeros for `tag` and keeping `photonum` as a number."""
     credentials = get_google_sheets_credentials()
     sheet_name = f"instai-{cutoff_date.replace('-', '')}"
+
+    if race_id:
+        sheet_name += f"-{race_id}"
 
     if not credentials:
         logger.error("⚠️ Google Sheets credentials missing. Skipping CSV upload.")
@@ -156,17 +160,25 @@ def save_csv_to_google_sheets(csv_file, cutoff_date):
 
 
 # ✅ Fetch Detection Data from PostgreSQL
-def fetch_data(cutoff_date, env):
+def fetch_data(cutoff_date, env, race_id):
     """Fetch detection data from PostgreSQL."""
     try:
         with pg8000.connect(**DB_CONFIG) as conn:
             cursor = conn.cursor()
-            query = """
-            SELECT eid, cid, photonum, tag
-            FROM allsports_bib_number_detection
-            WHERE cutoff_date = %s AND env = %s AND tag <> ''
-            """
-            cursor.execute(query, (cutoff_date, env))
+            if race_id:
+                query = """
+                SELECT eid, cid, photonum, tag
+                FROM allsports_bib_number_detection
+                WHERE cutoff_date = %s AND env = %s AND race_id = %s AND tag <> ''
+                """
+                cursor.execute(query, (cutoff_date, env, race_id))
+            else:
+                query = """
+                SELECT eid, cid, photonum, tag
+                FROM allsports_bib_number_detection
+                WHERE cutoff_date = %s AND env = %s AND tag <> ''
+                """
+                cursor.execute(query, (cutoff_date, env))
             return [
                 {"eid": row[0], "cid": row[1], "photonum": row[2], "tag": row[3]}
                 for row in cursor.fetchall()
@@ -199,13 +211,16 @@ def generate_csv(data):
 
 
 # ✅ Get Count of Processed Images
-def get_processed_image_count(cutoff_date):
+def get_processed_image_count(env, cutoff_date, race_id):
     """Retrieve the total count of processed images from PostgreSQL."""
     try:
         with pg8000.connect(**DB_CONFIG) as conn:
             cursor = conn.cursor()
-            query = "SELECT COUNT(*) FROM athlete_number_detection_processed_image WHERE cutoff_date = %s"
-            cursor.execute(query, (cutoff_date,))
+            if race_id:
+                query = "SELECT COUNT(*) FROM athlete_number_detection_processed_image WHERE cutoff_date = %s AND env = %s AND race_id = %s"
+            else:
+                query = "SELECT COUNT(*) FROM athlete_number_detection_processed_image WHERE cutoff_date = %s AND env = %s"
+            cursor.execute(query, (cutoff_date, env, race_id))
             count = cursor.fetchone()[0]
 
         logger.info(f"✅ Processed images for {cutoff_date}: {count}")
@@ -216,9 +231,11 @@ def get_processed_image_count(cutoff_date):
 
 
 # ✅ Send Email with CSV Attachment
-def send_email(csv_file, env, cutoff_date):
+def send_email(csv_file, env, cutoff_date, race_id):
     """Send email with CSV attachment via AWS SES."""
-    total_processed = get_processed_image_count(cutoff_date)
+    total_processed = get_processed_image_count(
+        cutoff_date=cutoff_date, env=env, race_id=race_id
+    )
 
     email_body = (
         f"Dear Customer,\n\n"
@@ -258,18 +275,21 @@ def send_email(csv_file, env, cutoff_date):
 # ✅ AWS Lambda Handler
 def lambda_handler(event, context):
     """Main Lambda function."""
-    cutoff_date = event.get("cutoff_date", "2025-02-28")
+    cutoff_date = event.get("cutoff_date", "2025-03-09")
+    race_id = event.get("race_id", "0309-E778738")
     env = event.get("env", "test")
 
-    logger.info(f"🔍 Processing for cutoff_date={cutoff_date}, env={env}")
+    logger.info(
+        f"🔍 Processing for cutoff_date={cutoff_date}, env={env}, race_id={race_id}"
+    )
 
-    data = fetch_data(cutoff_date, env)
+    data = fetch_data(cutoff_date, env, race_id)
     if not data:
         logger.warning("⚠️ No data found.")
         return {"statusCode": 200, "body": "No data to send"}
 
     csv_file = generate_csv(data)
-    save_csv_to_google_sheets(csv_file, cutoff_date)
-    send_email(csv_file, env, cutoff_date)
+    save_csv_to_google_sheets(csv_file, cutoff_date, race_id)
+    send_email(csv_file, env=env, cutoff_date=cutoff_date, race_id=race_id)
 
     return {"statusCode": 200, "body": f"CSV email sent successfully"}
