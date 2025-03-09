@@ -11,8 +11,8 @@ from PIL import Image
 
 LOGGER = setup_logger(__name__)
 
-
 def split_list_evenly(lst, n):
+    """Split list into n evenly sized parts."""
     k, m = divmod(len(lst), n)
     return [lst[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n)]
 
@@ -37,12 +37,12 @@ class DetectionOCRService:
 
     async def initialize(self):
         async with self.lock:
-            # Initialize detection service
+            # Initialize YOLO Detection Service across multiple GPUs
             self.detection_service = await DetectionService.get_instance(
                 gpu_ids=self.yolo_gpus
             )
 
-            # Initialize OCR services for each GPU
+            # Initialize multiple OCR services, one per GPU
             for gpu_id in self.ocr_gpus:
                 service = OCRService(gpu_id=gpu_id)
                 self.ocr_services[gpu_id] = service
@@ -53,23 +53,46 @@ class DetectionOCRService:
     async def process_images(self, images: List[np.ndarray]) -> List[List[str]]:
         start_time = time.time()
 
-        # Phase 1: Parallel detection
+        # Step 1: Parallel Detection
         detections = await self._parallel_detection(images)
 
-        # Phase 2: Parallel OCR processing
+        # Step 2: Parallel OCR Processing
         results = await self._parallel_ocr_processing(detections)
 
         LOGGER.info(f"Total processing time: {time.time() - start_time:.2f}s")
         return self._organize_results(results, detections)
 
     async def _parallel_detection(self, images: list):
-        batches = split_list_evenly(images, len(self.yolo_gpus))
+        """Distribute YOLO detection across multiple GPUs."""
+        if not images:
+            LOGGER.error("⚠️ No images provided for detection.")
+            return []
+
+        num_gpus = max(1, len(self.yolo_gpus))  # Avoid division by zero
+        batches = split_list_evenly(images, num_gpus)
+
+        # Ensure there is at least one batch
+        batches = [batch for batch in batches if batch]  # Remove empty batches
+
+        if not batches:
+            LOGGER.error("⚠️ All batches are empty after splitting.")
+            return []
+
         futures = [self.detection_service.detect_async(batch) for batch in batches]
-        results = await asyncio.gather(*futures)
-        return [item for sublist in results for item in sublist]
+        results = await asyncio.gather(*futures, return_exceptions=True)
+
+        # Handle detection failures
+        detections = []
+        for result in results:
+            if isinstance(result, Exception):
+                LOGGER.error(f"❌ YOLO Detection failed: {result}")
+            else:
+                detections.extend(result)
+
+        return detections
 
     async def _parallel_ocr_processing(self, detections):
-        """Distribute OCR across GPUs with load balancing"""
+        """Distribute OCR across GPUs with load balancing."""
         all_crops = [
             Image.fromarray(det["image"])
             for detection in detections
@@ -77,20 +100,23 @@ class DetectionOCRService:
         ]
 
         # Split work evenly across OCR GPUs
-        chunk_size = len(all_crops) // len(self.ocr_gpus) + 1
+        chunk_size = max(1, len(all_crops) // len(self.ocr_gpus))  # Avoid zero-size chunks
         futures = []
         for idx, gpu_id in enumerate(self.ocr_gpus):
             chunk = all_crops[idx * chunk_size : (idx + 1) * chunk_size]
-            futures.append(
-                self.executor.submit(
-                    self.ocr_services[gpu_id].extract_numbers_from_images, chunk
+            if gpu_id in self.ocr_services:
+                futures.append(
+                    self.executor.submit(
+                        self.ocr_services[gpu_id].extract_numbers_from_images, chunk
+                    )
                 )
-            )
+            else:
+                LOGGER.error(f"⚠️ OCR service for GPU {gpu_id} not initialized!")
 
         return await asyncio.gather(*[asyncio.wrap_future(f) for f in futures])
 
     def _organize_results(self, ocr_results, detections):
-        """Reconstruct original image structure"""
+        """Reconstruct original image structure."""
         flat_results = [r for chunk in ocr_results for r in chunk]
         ptr = 0
         organized = []
@@ -99,3 +125,4 @@ class DetectionOCRService:
             organized.append(flat_results[ptr : ptr + num_crops])
             ptr += num_crops
         return organized
+

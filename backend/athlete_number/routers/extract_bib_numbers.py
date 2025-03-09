@@ -10,57 +10,49 @@ from athlete_number.services.detection_orchestrator import DetectionOCRService
 from athlete_number.utils.logger import setup_logger
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
+from athlete_number.gpu_config import parse_gpu_ids  # Import GPU parsing function
+
 LOGGER = setup_logger(__name__)
 router = APIRouter(prefix="/extract", tags=["Athlete Number Extraction"])
 
-# Read batch size from environment variable, default to 2 if not set
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", 2))
+
+
+async def get_orchestrator():
+    """Initialize orchestrator with multi-GPU support."""
+    yolo_gpus = parse_gpu_ids("YOLO_GPUS", [0])  # e.g., YOLO_GPUS="0,1"
+    ocr_gpus = parse_gpu_ids("OCR_GPUS", [0])    # e.g., OCR_GPUS="2,3"
+    return await DetectionOCRService.get_instance(yolo_gpus=yolo_gpus, ocr_gpus=ocr_gpus)
 
 
 def load_image_from_upload(file: UploadFile) -> np.ndarray:
     """Load an image from an UploadFile object into a NumPy array."""
     image_bytes = file.file.read()
-    image_np = np.frombuffer(image_bytes, np.uint8)  # Convert bytes to NumPy array
-    return cv2.imdecode(image_np, cv2.IMREAD_COLOR)  # Decode image
+    image_np = np.frombuffer(image_bytes, np.uint8)
+    image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
+
+    if image is None:
+        LOGGER.error(f"❌ Failed to load image: {file.filename}")
+        raise HTTPException(status_code=400, detail=f"Invalid or corrupted image: {file.filename}")
+
+    return image
 
 
-@router.post(
-    "/bib-numbers",
-    response_model=List[AthleteNumberResponse],
-    summary="Extract athlete numbers from multiple images using YOLO and OCR",
-    description="Processes multiple uploaded images to detect and extract bib numbers.",
-    responses={
-        200: {"description": "Successfully extracted bib numbers"},
-        400: {"description": "Invalid input or missing files"},
-        500: {"description": "Internal processing error"},
-        503: {"description": "Service unavailable"},
-    },
-)
+@router.post("/bib-numbers")
 async def extract_athlete_numbers(
     files: List[UploadFile] = File(...),
-    orchestrator: DetectionOCRService = Depends(DetectionOCRService.get_instance),
+    orchestrator: DetectionOCRService = Depends(get_orchestrator),  # Use orchestrator with multiple GPUs
 ) -> List[AthleteNumberResponse]:
-    """
-    ### **Batch Athlete Number Extraction API**
-    - **Step 1**: YOLO detects bib numbers in batch.
-    - **Step 2**: GOT-OCR-2.0 extracts text asynchronously.
-    - **Step 3**: Returns results including detected numbers, bounding boxes, and processing time.
-    """
-
+    """API endpoint to process images using YOLO and OCR."""
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
 
-    LOGGER.info(
-        f"Received {len(files)} images for batch processing (Batch Size: {BATCH_SIZE})."
-    )
+    LOGGER.info(f"Received {len(files)} images for processing (Batch Size: {BATCH_SIZE}).")
 
-    # Load images into memory
     images = [load_image_from_upload(file) for file in files]
     filenames = [file.filename for file in files]
 
     responses = []
-
-    # Process in Batches
     for i in range(0, len(filenames), BATCH_SIZE):
         batch_images = images[i : i + BATCH_SIZE]
         batch_filenames = filenames[i : i + BATCH_SIZE]
@@ -70,42 +62,21 @@ async def extract_athlete_numbers(
 
         try:
             start_time = asyncio.get_event_loop().time()
-
             extracted_numbers_batch = await orchestrator.process_images(batch_images)
             processing_time = round(asyncio.get_event_loop().time() - start_time, 4)
 
-            for filename, extracted_numbers in zip(
-                batch_filenames, extracted_numbers_batch
-            ):
-                response_data = {
-                    "filename": filename,
-                    "athlete_numbers": extracted_numbers,
-                    "processing_time": processing_time / len(batch_filenames),
-                    "model_versions": {
-                        "detection": orchestrator.detection_service.detectors[
-                            0
-                        ].model_version,
-                        "ocr": "GOT-OCR-2.0",
-                    },
-                }
-
-                LOGGER.debug(f"📦 Processed {filename}: {response_data}")
-
+            for filename, extracted_numbers in zip(batch_filenames, extracted_numbers_batch):
                 responses.append(
                     AthleteNumberResponse(
-                        filename=response_data["filename"],
-                        athlete_numbers=extracted_numbers
-                        if isinstance(extracted_numbers, list)
-                        else [extracted_numbers],
+                        filename=filename,
+                        athlete_numbers=extracted_numbers if isinstance(extracted_numbers, list) else [extracted_numbers],
                     )
                 )
 
         except torch.cuda.OutOfMemoryError:
-            LOGGER.error("🔥 CUDA Out of Memory! Reducing batch size may help.")
+            LOGGER.error("🔥 CUDA Out of Memory! Reduce batch size.")
             torch.cuda.empty_cache()
-            raise HTTPException(
-                status_code=500,
-                detail="GPU out of memory. Try processing fewer images.",
-            )
+            raise HTTPException(status_code=500, detail="GPU out of memory. Try processing fewer images.")
 
     return responses
+
