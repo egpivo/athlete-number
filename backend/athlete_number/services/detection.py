@@ -1,11 +1,11 @@
 import asyncio
 from typing import Dict, List
 
+import numpy as np
 import torch
 from athlete_number.core.configs import YOLO_PATH
-from athlete_number.services.utils import ModelPathResolver
+from athlete_number.services.utils import ModelPathResolver, resize_image_with_width
 from athlete_number.utils.logger import setup_logger
-from PIL import Image
 from ultralytics import YOLO
 
 LOGGER = setup_logger(__name__)
@@ -39,11 +39,11 @@ class DigitDetector:
     def device_type(self) -> str:
         return "gpu" if torch.cuda.is_available() else "cpu"
 
-    async def detect_async(self, image: List[Image.Image]) -> List[List[Dict]]:
+    async def detect_async(self, images: List[np.ndarray]) -> List[List[Dict]]:
         """Run detection asynchronously."""
-        return await asyncio.to_thread(self.detect, image)
+        return await asyncio.to_thread(self.detect, images)
 
-    def detect(self, images: List[Image.Image]) -> List[List[Dict]]:
+    def detect(self, images: List[np.ndarray]) -> List[List[Dict]]:
         try:
             results = self.model(
                 images,
@@ -53,26 +53,34 @@ class DigitDetector:
                 max_det=self.max_det,
                 augment=True,
             )
-            return [self._format_results(result) for result in results]
+            return [
+                self._format_results(result, images[idx])
+                for idx, result in enumerate(results)
+            ]
         except Exception as e:
             LOGGER.error(f"Inference failed: {e}")
             raise RuntimeError("Detection failed")
 
-    def _format_results(self, results) -> List[Dict]:
+    def _format_results(self, result, orig_img) -> List[Dict]:
         detections = []
-        for result in results:
-            for box in result.boxes:
-                xyxy = [
-                    float(coord) for sublist in box.xyxy.tolist() for coord in sublist
-                ]
-                detections.append(
-                    {
-                        "class_id": int(box.cls.item()),
-                        "confidence": float(box.conf.item()),
-                        "bbox": xyxy,
-                    }
-                )
-        return sorted(detections, key=lambda x: x["bbox"][0])
+        dets = result.boxes
+        boxes_conf = list(zip(dets.xyxy.tolist(), dets.conf.tolist()))
+        boxes_conf.sort(key=lambda x: x[1], reverse=True)
+
+        for bbox_xyxy, conf_score in boxes_conf:
+            x1, y1, x2, y2 = map(int, bbox_xyxy)
+            cropped_img = orig_img[y1:y2, x1:x2]
+
+            processed_rgb = resize_image_with_width(cropped_img)
+            detections.append(
+                {
+                    "bbox": bbox_xyxy,
+                    "confidence": float(conf_score),
+                    "image": processed_rgb,
+                }
+            )
+
+        return detections
 
 
 class DetectionService:
@@ -97,7 +105,7 @@ class DetectionService:
             try:
                 model_path = ModelPathResolver(YOLO_PATH).get_model_path()
                 self.detector = DigitDetector(model_path)
-                LOGGER.info("✅ Model initialized successfully.")
+                LOGGER.info("Model initialized successfully.")
             except Exception as e:
-                LOGGER.critical(f"❌ Model initialization failed: {e}")
+                LOGGER.critical(f"Model initialization failed: {e}")
                 raise RuntimeError("Model initialization failed")

@@ -21,19 +21,28 @@ DB_PW = os.getenv("DB_PW")
 TABLE_NAME = "allsports_bib_number_detection"
 
 
+def convert_fullwidth_to_halfwidth(s):
+    # Convert full-width characters to half-width
+    return s.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+
+
 def process_results(results):
     """Convert OCR results into structured format."""
-    rows = []
+    unique_rows = set()
+
     for result in results:
         eid, cid, photonum = result.filename.split("/")[-1].split("_")[:3]
+
         if result.extracted_number:
             for tag in result.extracted_number:
+                tag = convert_fullwidth_to_halfwidth(tag)
                 if re.fullmatch(r"\d{5}", tag):
-                    rows.append((eid, cid, photonum, tag))
-    return rows
+                    unique_rows.add((eid, cid, photonum, tag))
+
+    return list(unique_rows)
 
 
-def save_results_to_postgres(results, cutoff_date, env):
+def save_results_to_postgres(results, cutoff_date, env, race_id):
     """Insert detection results into PostgreSQL with cutoff_date and env."""
 
     structured_results = process_results(results)
@@ -51,15 +60,16 @@ def save_results_to_postgres(results, cutoff_date, env):
 
         # Insert query using batch insert
         insert_query = f"""
-        INSERT INTO {TABLE_NAME} (eid, cid, photonum, tag, cutoff_date, env)
+        INSERT INTO {TABLE_NAME} (eid, cid, photonum, tag, cutoff_date, env, race_id)
         VALUES %s
         ON CONFLICT (eid, cid, photonum, tag, cutoff_date, env) DO UPDATE
-        SET modified_at = NOW();
+        SET tag = EXCLUDED.tag;
         """
 
         # Prepare data by adding cutoff_date and env to each record
         records = [
-            (r[0], r[1], r[2], r[3], cutoff_date, env) for r in structured_results
+            (r[0], r[1], r[2], r[3], cutoff_date, env, race_id)
+            for r in structured_results
         ]
 
         # Batch insert data

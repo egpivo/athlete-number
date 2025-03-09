@@ -12,7 +12,7 @@ load_dotenv()
 
 LOGGER = setup_logger(__name__)
 
-BIB_NUM_LENGTH = int(os.getenv("BIB_NUM_LENGTH", 5))
+BIB_NUM_LENGTH = int(os.getenv("BIB_NUM_LENGTH", "0"))
 
 
 class OCRService:
