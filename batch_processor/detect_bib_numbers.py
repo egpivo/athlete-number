@@ -51,6 +51,12 @@ parser.add_argument(
     action="store_true",
     help="Force restart the process by resetting the last checkpoint.",
 )
+parser.add_argument(
+    "--race_id",
+    type=str,
+    default=None,
+    help="Race ID",
+)
 args = parser.parse_args()
 
 
@@ -130,6 +136,7 @@ async def main():
                     detection_results,
                     args.cutoff_date,
                     args.env,
+                    args.race_id,
                 )
 
                 # Mark keys as processed & update checkpoint asynchronously

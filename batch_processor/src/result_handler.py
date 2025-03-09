@@ -36,7 +36,7 @@ def process_results(results):
     return list(unique_rows)
 
 
-def save_results_to_postgres(results, cutoff_date, env):
+def save_results_to_postgres(results, cutoff_date, env, race_id):
     """Insert detection results into PostgreSQL with cutoff_date and env."""
 
     structured_results = process_results(results)
@@ -54,7 +54,7 @@ def save_results_to_postgres(results, cutoff_date, env):
 
         # Insert query using batch insert
         insert_query = f"""
-        INSERT INTO {TABLE_NAME} (eid, cid, photonum, tag, cutoff_date, env)
+        INSERT INTO {TABLE_NAME} (eid, cid, photonum, tag, cutoff_date, env, race_id)
         VALUES %s
         ON CONFLICT (eid, cid, photonum, tag, cutoff_date, env) DO UPDATE
         SET tag = EXCLUDED.tag;
@@ -62,7 +62,8 @@ def save_results_to_postgres(results, cutoff_date, env):
 
         # Prepare data by adding cutoff_date and env to each record
         records = [
-            (r[0], r[1], r[2], r[3], cutoff_date, env) for r in structured_results
+            (r[0], r[1], r[2], r[3], cutoff_date, env, race_id)
+            for r in structured_results
         ]
 
         # Batch insert data
