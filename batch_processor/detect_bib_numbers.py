@@ -22,6 +22,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+import re
+def get_valid_keys(s3_keys, valid_min=2335962, valid_max=2344339, processed_keys=None):
+    filtered_keys = []
+
+    for key in s3_keys:
+        match = re.search(r"_(\d+)_", key)  # Extract numeric part between underscores
+        if match:
+            photo_number = int(match.group(1))  # Convert to integer
+            if valid_min <= photo_number <= valid_max:
+                filtered_keys.append(key)
+
+    # Exclude already processed keys
+    unprocessed_keys = (
+        [key for key in filtered_keys if key not in processed_keys]
+        if processed_keys
+        else filtered_keys
+    )
+
+    return unprocessed_keys
+
+
+
+
 parser = argparse.ArgumentParser(description="Batch process images from S3")
 parser.add_argument(
     "--max_images",
@@ -84,7 +108,7 @@ async def main():
 
         filtered_keys = [key for key in image_keys if "_tn_" in key]
         processed_keys = await async_get_processed_keys_from_db(
-            image_keys, args.cutoff_date, args.env
+            image_keys, args.cutoff_date, args.env, args.race_id
         )
         processed_keys = set(str(key) for key in processed_keys)
 
@@ -141,7 +165,7 @@ async def main():
 
                 # Mark keys as processed & update checkpoint asynchronously
                 await async_mark_keys_as_processed(
-                    batch_keys, args.cutoff_date, args.env
+                    batch_keys, args.cutoff_date, args.env, args.race_id
                 )
                 await async_write_checkpoint_safely(batch_keys[-1], args.cutoff_date)
                 total_processed += len(batch_keys)

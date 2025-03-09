@@ -6,6 +6,7 @@ import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extras import execute_values
 from src.config import OUTPUT_CSV
+import unicodedata
 
 # Load environment variables
 load_dotenv()
@@ -21,6 +22,12 @@ DB_PW = os.getenv("DB_PW")
 TABLE_NAME = "allsports_bib_number_detection"
 
 
+def convert_fullwidth_to_halfwidth(s):
+    # Convert full-width characters to half-width
+    return s.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+
+
+
 def process_results(results):
     """Convert OCR results into structured format."""
     unique_rows = set()
@@ -30,6 +37,7 @@ def process_results(results):
 
         if result.extracted_number:
             for tag in result.extracted_number:
+                tag = convert_fullwidth_to_halfwidth(tag)
                 if re.fullmatch(r"\d{5}", tag):
                     unique_rows.add((eid, cid, photonum, tag))
 
