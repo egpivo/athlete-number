@@ -57,7 +57,7 @@ def save_results_to_postgres(results, cutoff_date, env):
         INSERT INTO {TABLE_NAME} (eid, cid, photonum, tag, cutoff_date, env)
         VALUES %s
         ON CONFLICT (eid, cid, photonum, tag, cutoff_date, env) DO UPDATE
-        SET modified_at = NOW();
+        SET tag = EXCLUDED.tag;
         """
 
         # Prepare data by adding cutoff_date and env to each record
