@@ -4,7 +4,7 @@ from athlete_number.services.detection_orchestrator import DetectionOCRService
 
 async def initialize_ocr():
     """Initialize the DetectionOCRService asynchronously."""
-    return await DetectionOCRService.get_instance()
+    return await DetectionOCRService.get_instance(yolo_gpus=[0,1], ocr_gpus=[2,3])
 
 
 async def process_images_with_ocr(ocr_service, images: list, filenames: list):
