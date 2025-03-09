@@ -52,7 +52,6 @@ class DetectionOCRService:
 
     async def process_images(self, images: List[np.ndarray]) -> List[List[str]]:
         start_time = time.time()
-
         # Step 1: Parallel Detection
         detections = await self._parallel_detection(images)
 
@@ -63,33 +62,79 @@ class DetectionOCRService:
         return self._organize_results(results, detections)
 
     async def _parallel_detection(self, images: list):
-        """Distribute YOLO detection across multiple GPUs."""
+        """Process images one by one for debugging YOLO detection."""
+    
         if not images:
             LOGGER.error("⚠️ No images provided for detection.")
             return []
 
-        num_gpus = max(1, len(self.yolo_gpus))  # Avoid division by zero
-        batches = split_list_evenly(images, num_gpus)
+        detections = []
+        for idx, image in enumerate(images):
+            if image is None or image.size == 0:
+                LOGGER.error(f"❌ Image {idx} is empty or None.")
+                continue
+        
+            # 🚨 Debugging: Log image shape
+            LOGGER.info(f"✅ Processing Image {idx} -> Shape: {image.shape}, dtype: {image.dtype}")
 
-        # Ensure there is at least one batch
-        batches = [batch for batch in batches if batch]  # Remove empty batches
+            # 🔥 Ensure shape is valid for YOLO
+            if len(image.shape) == 4:
+                LOGGER.warning(f"⚠️ Image {idx} has extra dimensions. Squeezing...")
+                image = np.squeeze(image)  # Remove unnecessary dimensions
+        
+            if len(image.shape) != 3 or image.shape[2] not in [1, 3]:
+                LOGGER.error(f"❌ Invalid shape for YOLO: {image.shape}")
+                continue
 
-        if not batches:
-            LOGGER.error("⚠️ All batches are empty after splitting.")
+            try:
+                result = await self.detection_service.detect_async([image])  # Process one image at a time
+                detections.append(result)
+            except Exception as e:
+                LOGGER.error(f"❌ YOLO Detection failed for Image {idx}: {e}")
+
+        return detections
+
+
+
+    async def _parallel_detection(self, images: list):
+        """Distribute YOLO detection across multiple GPUs, ensuring proper format."""
+        if not images:
+            LOGGER.error("⚠️ No images received for detection.")
             return []
 
+        num_gpus = min(len(images), len(self.yolo_gpus))  # ✅ Avoid empty batches
+        batches = split_list_evenly(images, num_gpus)
+        batches = [batch for batch in batches if batch]  # ✅ Remove empty batches
+
+        batches = [batch for batch in batches if batch]
+        if not batches:
+            LOGGER.error("❌ All YOLO batches are empty after splitting!")
+            return []
+
+        for idx, batch in enumerate(batches):
+            if not all(isinstance(img, np.ndarray) for img in batch):
+                LOGGER.error(f"❌ Invalid batch {idx}: Not all elements are NumPy arrays.")
+                continue
+            if any(img is None or img.size == 0 for img in batch):
+                LOGGER.error(f"❌ Invalid batch {idx}: Contains empty images.")
+
+        # Log batch shapes
+        for idx, batch in enumerate(batches):
+            LOGGER.info(f"✅ YOLO Batch {idx} -> Shape: {[img.shape for img in batch]}")
+
+        # Ensure batch is always a list of NumPy arrays
         futures = [self.detection_service.detect_async(batch) for batch in batches]
         results = await asyncio.gather(*futures, return_exceptions=True)
 
-        # Handle detection failures
         detections = []
         for result in results:
             if isinstance(result, Exception):
-                LOGGER.error(f"❌ YOLO Detection failed: {result}")
+                LOGGER.error(f"❌  YOLO Detection failed: {result}")
             else:
                 detections.extend(result)
 
         return detections
+
 
     async def _parallel_ocr_processing(self, detections):
         """Distribute OCR across GPUs with load balancing."""

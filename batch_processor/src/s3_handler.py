@@ -17,6 +17,20 @@ s3_client = boto3.client(
     aws_secret_access_key=AWS_SECRET_KEY,
     config=boto_config,
 )
+import cv2
+import numpy as np
+
+def validate_image(local_path):
+    """Check if the downloaded image is valid."""
+    try:
+        image = cv2.imread(local_path)
+        if image is None or image.size == 0:
+            logger.error(f"⚠️ Corrupted image detected: {local_path}")
+            return False
+        return True
+    except Exception as e:
+        logger.error(f"❌ Failed to validate image {local_path}: {e}")
+        return False
 
 
 async def list_s3_images_incremental(
@@ -87,21 +101,29 @@ async def download_image(bucket: str, key: str):
 
 
 async def batch_download_images(image_keys: list, local_dir: str):
-    """Download images maintaining original directory structure."""
+    """Download images and validate them."""
     os.makedirs(local_dir, exist_ok=True)
 
     async def download_single(key):
         img_bytes, _ = await download_image(DEST_BUCKET, key)
-        if img_bytes is not None:
+        if img_bytes:
             local_path = os.path.join(local_dir, key)
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, "wb") as f:
                 f.write(img_bytes)
-            return key, local_path
+            
+            # ✅ Validate the image after saving
+            if validate_image(local_path):
+                return key, local_path
+            else:
+                os.remove(local_path)  # ❌ Remove corrupted files
+                return None  # ❌ Failed validation
+        
+        logger.error(f"❌ Image download failed for key: {key}")
         return None
 
     results = await asyncio.gather(*(download_single(k) for k in image_keys))
-    return [(key, path) for key, path in results if path is not None]
+    return [(key, path) for key, path in results if key is not None and path]
 
 
 async def read_checkpoint(bucket: str, key: str) -> str:
