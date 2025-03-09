@@ -39,7 +39,7 @@ RECIPIENT_EMAILS = [
 TEST_SUBJECT = "[InstAI] Bib Number Detection Report - TEST"
 PRODUCTION_SUBJECT = "[InstAI] Bib Number Detection Report - PROCESSED IMAGES"
 GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID")
-DIGIT_LENGTH = 5
+DIGIT_LENGTH = 0
 # ✅ PostgreSQL Configuration
 DB_CONFIG = {
     "host": os.getenv("DB_HOST"),
@@ -201,9 +201,8 @@ def generate_csv(data):
         writer.writeheader()
 
         for row in data:
-            row[
-                "tag"
-            ] = f"'{row['tag'].zfill(DIGIT_LENGTH)}'"  # ✅ Wrap tag in single quotes to prevent conversion
+            if DIGIT_LENGTH > 0:
+                row["tag"] = f"'{row['tag'].zfill(DIGIT_LENGTH)}'"
             writer.writerow(row)
 
     logger.info(f"✅ CSV successfully written: {csv_file}")

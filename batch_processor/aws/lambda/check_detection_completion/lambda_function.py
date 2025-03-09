@@ -198,9 +198,8 @@ def generate_csv(data):
         writer.writeheader()
 
         for row in data:
-            row[
-                "tag"
-            ] = f"'{row['tag'].zfill(DIGIT_LENGTH)}'"  # ✅ Wrap tag in single quotes to prevent conversion
+            if DIGIT_LENGTH > 0:
+                row["tag"] = f"'{row['tag'].zfill(DIGIT_LENGTH)}'"
             writer.writerow(row)
 
     logger.info(f"✅ CSV successfully written: {csv_file}")
@@ -229,20 +228,10 @@ def get_processed_image_count(env, cutoff_date, race_id):
 def send_email(csv_file, cutoff_date, env, race_id):
     """Send final email with CSV attachment via AWS SES."""
 
-    # ✅ Check if file exists
     if not os.path.exists(csv_file):
         logger.error(f"❌ CSV file missing: {csv_file}")
         return
 
-    # ✅ Debug: Print CSV content before sending
-    # with open(csv_file, "r", encoding="utf-8") as file:
-    #     reader = csv.reader(file)
-    #     for row in reader:
-    #         logger.info(
-    #             f"📄 CSV Row Before Sending: {row}"
-    #         )
-
-    # ✅ Read CSV as bytes for attachment
     with open(csv_file, "rb") as file:
         csv_data = file.read()
 
