@@ -20,7 +20,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_processed_keys_from_db(image_keys: list, cutoff_date: str, env: str, race_id: str = None) -> set:
+def get_processed_keys_from_db(
+    image_keys: list, cutoff_date: str, env: str, race_id: str = None
+) -> set:
     """Retrieve keys already processed from the database."""
     processed = set()
     if not image_keys:
@@ -45,7 +47,9 @@ def get_processed_keys_from_db(image_keys: list, cutoff_date: str, env: str, rac
     return processed
 
 
-def mark_keys_as_processed(image_keys: list, cutoff_date: str, env: str, race_id: str) -> None:
+def mark_keys_as_processed(
+    image_keys: list, cutoff_date: str, env: str, race_id: str
+) -> None:
     """Mark keys as processed in the database with a cutoff date."""
     if not image_keys:
         return
@@ -64,13 +68,13 @@ def mark_keys_as_processed(image_keys: list, cutoff_date: str, env: str, race_id
                     ON CONFLICT (image_key, cutoff_date, env) DO NOTHING""",
                     args,
                 )
-            else:            
+            else:
                 cur.executemany(
                     f"""INSERT INTO {PROCESSED_KEY_TABLE} (image_key, cutoff_date, env)
                     VALUES (%s, %s, %s)
                     ON CONFLICT (image_key, cutoff_date, env) DO NOTHING""",
                     args,
-                 )
+                )
         conn.commit()
         conn.close()
     except Exception as e:
@@ -119,4 +123,6 @@ async def async_get_processed_keys_from_db(image_keys, cutoff_date, env, race_id
 
 
 async def async_mark_keys_as_processed(image_keys, cutoff_date, env, race_id):
-    await asyncio.to_thread(mark_keys_as_processed, image_keys, cutoff_date, env, race_id)
+    await asyncio.to_thread(
+        mark_keys_as_processed, image_keys, cutoff_date, env, race_id
+    )

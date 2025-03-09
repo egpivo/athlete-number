@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 import re
+
+
 def get_valid_keys(s3_keys, valid_min=2335962, valid_max=2344339, processed_keys=None):
     filtered_keys = []
 
@@ -42,8 +44,6 @@ def get_valid_keys(s3_keys, valid_min=2335962, valid_max=2344339, processed_keys
     )
 
     return unprocessed_keys
-
-
 
 
 parser = argparse.ArgumentParser(description="Batch process images from S3")
